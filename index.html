@@ -6033,9 +6033,11 @@ function _b17RenderCruce(matched, sinBanco, sinRegistro) {
     </div>`;
   }
 
-  // Cargar notas guardadas
-  let _cruceNotas = {};
-  try { _cruceNotas = JSON.parse(localStorage.getItem('bnl_cruce_notas') || '{}'); } catch(e) {}
+  // Cargar notas: cache en memoria (siempre actualizado por Firebase) → localStorage → vacío
+  let _cruceNotas = window._cruceNotasCache || {};
+  if (!Object.keys(_cruceNotas).length) {
+    try { _cruceNotas = JSON.parse(localStorage.getItem('bnl_cruce_notas_v1') || localStorage.getItem('bnl_cruce_notas') || '{}'); } catch(e) {}
+  }
 
   const _notaCell = (key) => {
     const val = (_cruceNotas[key] || '').replace(/"/g,'&quot;');
@@ -6118,7 +6120,8 @@ function _b17RenderCruce(matched, sinBanco, sinRegistro) {
     else delete _cruceNotas[key];
     td.style.fontStyle = val ? 'normal' : 'italic';
     const _notasJson = JSON.stringify(_cruceNotas);
-    try { localStorage.setItem('bnl_cruce_notas', _notasJson); } catch(e2) {}
+    window._cruceNotasCache = _cruceNotas;
+    try { localStorage.setItem('bnl_cruce_notas_v1', _notasJson); } catch(e2) {}
     if (typeof window._fbForceWrite === 'function') window._fbForceWrite('bnl_cruce_notas_v1', _notasJson);
   }, { once: false });
 
@@ -7407,9 +7410,10 @@ showSheet = function(idx) {
       } else if (key === 'bnl_eventos_v1') {
         _restoreEventosExtra(JSON.parse(value));
       } else if (key === 'bnl_cruce_notas_v1') {
-        // Actualizar localStorage + celdas visibles en tiempo real
-        try { localStorage.setItem('bnl_cruce_notas', value); } catch(e2) {}
+        // Actualizar cache en memoria + localStorage + celdas visibles en tiempo real
         const notas = JSON.parse(value);
+        window._cruceNotasCache = notas;
+        try { localStorage.setItem('bnl_cruce_notas_v1', value); } catch(e2) {}
         document.querySelectorAll('td[data-nota-key]').forEach(function(td) {
           const k = td.getAttribute('data-nota-key');
           if (!k) return;
@@ -7498,6 +7502,10 @@ showSheet = function(idx) {
                 .catch(e => console.warn('[Sync] Push LS→FB falló:', key, e));
             } else {
               _writing = true; _lsSet(key, snap.val().v); _writing = false;
+              // Para notas del cruce: poblar cache en memoria inmediatamente
+              if (key === 'bnl_cruce_notas_v1') {
+                try { window._cruceNotasCache = JSON.parse(snap.val().v); } catch(e2) {}
+              }
             }
           }
         } else {
@@ -7505,6 +7513,9 @@ showSheet = function(idx) {
           if (lsVal) {
             _db.ref('d/' + key).set({ v: lsVal, t: Date.now() })
               .catch(e => console.warn('[Sync] Push inicial falló:', key, e));
+            if (key === 'bnl_cruce_notas_v1') {
+              try { window._cruceNotasCache = JSON.parse(lsVal); } catch(e2) {}
+            }
           }
         }
       } catch(e) { console.warn('[Sync] Fetch falló:', key, e); }
