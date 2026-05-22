@@ -6033,6 +6033,18 @@ function _b17RenderCruce(matched, sinBanco, sinRegistro) {
     </div>`;
   }
 
+  // Cargar notas guardadas
+  let _cruceNotas = {};
+  try { _cruceNotas = JSON.parse(localStorage.getItem('bnl_cruce_notas') || '{}'); } catch(e) {}
+
+  const _notaCell = (key) => {
+    const val = (_cruceNotas[key] || '').replace(/"/g,'&quot;');
+    return `<td contenteditable="true" data-nota-key="${key}"
+      style="padding:4px 8px;min-width:120px;max-width:220px;border-left:2px solid #e2e8f0;
+             color:#374151;font-style:${val?'normal':'italic'};white-space:pre-wrap;word-break:break-word;
+             outline:none;cursor:text" title="Haz clic para escribir una nota">${val||''}</td>`;
+  };
+
   if (sinBanco.length) {
     html += `<div style="margin-bottom:12px">
       <div style="font-weight:700;color:#dc2626;font-size:11px;margin-bottom:6px;padding:4px 0;border-bottom:2px solid #fee2e2">
@@ -6047,9 +6059,11 @@ function _b17RenderCruce(matched, sinBanco, sinRegistro) {
           <th style="padding:5px 8px;text-align:left">Empresario</th>
           <th style="padding:5px 8px;text-align:left">Método pago</th>
           <th style="padding:5px 8px;text-align:left">Ref. Bancolombia</th>
+          <th style="padding:5px 8px;text-align:left;border-left:2px solid #fca5a5">📝 Notas</th>
         </tr></thead><tbody>`;
     sinBanco.forEach(a => {
       const faltaFecha = !a.fecha;
+      const nKey = `a-${a.num}-${a.fecha}-${a.monto}`;
       html += `<tr style="border-bottom:1px solid #fecaca">
         <td style="padding:4px 8px;font-weight:600">${a.num}</td>
         <td style="padding:4px 8px;color:${faltaFecha?'#dc2626':'#374151'}">${a.fecha||'⚠ SIN FECHA'}</td>
@@ -6058,6 +6072,7 @@ function _b17RenderCruce(matched, sinBanco, sinRegistro) {
         <td style="padding:4px 8px;color:#374151">${a.empresario||'—'}</td>
         <td style="padding:4px 8px">${a.metodo||'—'}</td>
         <td style="padding:4px 8px;color:#64748b;font-size:10px">${a.ref||'—'}</td>
+        ${_notaCell(nKey)}
       </tr>`;
     });
     html += '</tbody></table></div>';
@@ -6074,13 +6089,16 @@ function _b17RenderCruce(matched, sinBanco, sinRegistro) {
           <th style="padding:5px 8px;text-align:right">Monto</th>
           <th style="padding:5px 8px;text-align:left">Descripción</th>
           <th style="padding:5px 8px;text-align:left">Referencia</th>
+          <th style="padding:5px 8px;text-align:left;border-left:2px solid #fde047">📝 Notas</th>
         </tr></thead><tbody>`;
     sinRegistro.forEach(b => {
+      const nKey = `b-${b.fecha}-${b.monto}-${(b.ref||'').replace(/\s/g,'')}`;
       html += `<tr style="border-bottom:1px solid #fef08a">
         <td style="padding:4px 8px;color:#b45309">${b.fecha||'—'}</td>
         <td style="padding:4px 8px;text-align:right;font-weight:700">${liqFmt(b.monto)}</td>
         <td style="padding:4px 8px">${b.desc||'—'}</td>
         <td style="padding:4px 8px;color:#64748b;font-size:10px">${b.ref||'—'}</td>
+        ${_notaCell(nKey)}
       </tr>`;
     });
     html += '</tbody></table></div>';
@@ -6089,6 +6107,19 @@ function _b17RenderCruce(matched, sinBanco, sinRegistro) {
   html += '</div>';
   div.innerHTML = html;
   div.style.display = 'block';
+
+  // Guardar notas al escribir (event delegation sobre el div contenedor)
+  div.addEventListener('input', function(e) {
+    const td = e.target.closest('td[data-nota-key]');
+    if (!td) return;
+    const key = td.getAttribute('data-nota-key');
+    const val = td.textContent.trim();
+    if (val) _cruceNotas[key] = val;
+    else delete _cruceNotas[key];
+    td.style.fontStyle = val ? 'normal' : 'italic';
+    try { localStorage.setItem('bnl_cruce_notas', JSON.stringify(_cruceNotas)); } catch(e2) {}
+  }, { once: false });
+
   setTimeout(() => div.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
 }
 </script>
