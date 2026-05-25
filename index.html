@@ -6461,6 +6461,20 @@ function _normFechaB17(s) {
   // DD-MM-YYYY
   m = s.match(/^(\d{2})-(\d{2})-(\d{4})/);
   if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  // DDMMYYYY sin separadores (ej: 22052026 → 2026-05-22)
+  m = s.match(/^(\d{2})(\d{2})(\d{4})$/);
+  if (m) {
+    const dd = +m[1], mm = +m[2], yyyy = +m[3];
+    if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12 && yyyy >= 2000 && yyyy <= 2099)
+      return `${m[3]}-${m[2]}-${m[1]}`;
+  }
+  // YYYYMMDD sin separadores (ej: 20260522 → 2026-05-22)
+  m = s.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (m) {
+    const yyyy = +m[1], mm = +m[2], dd = +m[3];
+    if (yyyy >= 2000 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31)
+      return `${m[1]}-${m[2]}-${m[3]}`;
+  }
   return s.substring(0, 10);
 }
 
@@ -6474,7 +6488,14 @@ function b17CompareAnticipos() {
   // 1. Débitos del banco (= anticipos pagados)
   const bankDebits = [];
   B17.rows.forEach((r, i) => {
-    if (r.debito > 0) bankDebits.push({ fecha: _normFechaB17(r.fecha), monto: Math.round(r.debito), desc: r.desc, ref: r.ref, idx: i });
+    if (r.debito <= 0) return;
+    let fecha = _normFechaB17(r.fecha);
+    // Si la fecha no tiene formato YYYY-MM-DD (ej: es un número de cuenta), usar la referencia
+    if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+      const fechaRef = _normFechaB17(r.ref);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(fechaRef)) fecha = fechaRef;
+    }
+    bankDebits.push({ fecha, monto: Math.round(r.debito), desc: r.desc, ref: r.ref, idx: i });
   });
 
   // 2. Leer Anticipos (sheet 16) — columnas: [0]=vacío,[1]=#,[2]=Fecha sol,[3]=Cód evt,
