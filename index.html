@@ -5399,6 +5399,25 @@ function onVbEventSelect(code) {
   });
 }
 
+// Normaliza cualquier formato de fecha a YYYY-MM-DD para poder comparar
+function vbNormDate(s) {
+  if (!s) return '';
+  s = String(s).trim();
+  // YYYY-MM-DD o YYYY-MM-DDTHH:MM:SS
+  var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  // YYYY/MM/DD
+  m = s.match(/^(\d{4})\/(\d{2})\/(\d{2})/);
+  if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  // DD/MM/YYYY o D/M/YYYY
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
+  // DD-MM-YYYY
+  m = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+  if (m) return m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
+  return '';
+}
+
 function vbApplyDateFilter() {
   var from  = (document.getElementById('vb-date-from')  || {}).value || '';
   var to    = (document.getElementById('vb-date-to')    || {}).value || '';
@@ -5407,7 +5426,6 @@ function vbApplyDateFilter() {
   var resultsDiv = document.getElementById('vb-date-results');
   var wrap       = document.getElementById('tablewrap_9');
   var empty      = document.getElementById('vb-empty-state');
-  var evtCtrl    = document.querySelector('.mp-detail-controls[id!="mp-comm-filter-wrap"]');
 
   if (!from && !to) {
     if (clearBtn) clearBtn.style.display = 'none';
@@ -5432,6 +5450,9 @@ function vbApplyDateFilter() {
   var seen = {};
   var byEvent = {};
   var totalVentas = 0;
+  var validRows = 0;         // filas con Id Orden válido
+  var fechasEncontradas = {}; // para diagnóstico
+  var sinFecha = 0;
 
   for (var ri = 0; ri < rawRows.length; ri++) {
     var r = rawRows[ri];
@@ -5439,14 +5460,17 @@ function vbApplyDateFilter() {
     if (!id || id === 'Id Orden' || !/^\d{4,}$/.test(id)) continue;
     if (seen[id]) continue;
     seen[id] = true;
+    validRows++;
 
-    // Buscar fecha en columnas 1-14
+    // Buscar fecha en todas las columnas — soporta YYYY-MM-DD, DD/MM/YYYY, YYYY/MM/DD, DD-MM-YYYY
     var fecha = '';
     for (var c = 1; c < Math.min(r.length, 15); c++) {
-      var fm = (r[c] || '').match(/(\d{4}-\d{2}-\d{2})/);
-      if (fm) { fecha = fm[1]; break; }
+      var norm = vbNormDate(r[c] || '');
+      if (norm) { fecha = norm; break; }
     }
-    if (!fecha) continue;
+    if (!fecha) { sinFecha++; continue; }
+
+    fechasEncontradas[fecha] = (fechasEncontradas[fecha] || 0) + 1;
 
     // Aplicar filtro de rango
     if (from && fecha < from) continue;
@@ -5479,7 +5503,24 @@ function vbApplyDateFilter() {
   resultsDiv.style.display = '';
 
   if (totalVentas === 0) {
-    resultsDiv.innerHTML = '<div class="mp-detail-empty">No se encontraron ventas en el rango seleccionado.</div>';
+    // Construir mensaje de diagnóstico
+    var diag = '';
+    if (validRows === 0) {
+      diag = '<div class="mp-detail-empty" style="text-align:left;padding:20px 24px;">' +
+        '<p style="font-size:14px;font-weight:700;color:#dc2626;margin:0 0 8px;">⚠️ No hay datos de Ventas Diarias cargados</p>' +
+        '<p style="font-size:12px;color:#475569;margin:0;">Ve a la pestaña <strong>Ventas Diarias</strong>, carga el CSV y regresa aquí a filtrar.</p>' +
+        '</div>';
+    } else {
+      var fechasList = Object.keys(fechasEncontradas).sort();
+      var minF = fechasList[0] || '—';
+      var maxF = fechasList[fechasList.length-1] || '—';
+      diag = '<div class="mp-detail-empty" style="text-align:left;padding:20px 24px;">' +
+        '<p style="font-size:13px;font-weight:700;color:#b45309;margin:0 0 10px;">📅 No hay ventas en el rango <strong>' + rangLabel + '</strong></p>' +
+        '<p style="font-size:12px;color:#475569;margin:0 0 6px;">Los datos disponibles van de <strong>' + minF + '</strong> a <strong>' + maxF + '</strong> (' + validRows + ' ventas en total).</p>' +
+        '<p style="font-size:11px;color:#94a3b8;margin:0;">Ajusta el filtro a ese rango de fechas.</p>' +
+        '</div>';
+    }
+    resultsDiv.innerHTML = diag;
     return;
   }
 
