@@ -7396,11 +7396,17 @@ showSheet = function(idx) {
     _editableIdxs().filter(i => i !== 16 && i !== 19).forEach(idx => {
       const wrap = document.getElementById('tablewrap_' + idx);
       const cells = Array.from(wrap.querySelectorAll('td[contenteditable]'));
+      const dirty = (window._localDirtyIdx || {})[String(idx)] || {};
       const saved = {};
       let any = false;
       cells.forEach((td, i) => {
         const val = td.textContent;
-        if (val.trim() !== '') { saved[i] = val; any = true; }
+        if (val.trim() !== '') {
+          saved[i] = val; any = true;
+        } else if (dirty[i]) {
+          // Celda que el usuario vació explícitamente — guardar como vacío
+          saved[i] = ''; any = true;
+        }
       });
       if (any) data[idx] = saved;
     });
@@ -7409,6 +7415,7 @@ showSheet = function(idx) {
       const _json = JSON.stringify(data);
       localStorage.setItem(_KEY, _json);
       if (typeof window._fbForceWrite === 'function') window._fbForceWrite(_KEY, _json);
+      window._localDirtyIdx = {}; // reset tracking después de guardar
     } catch(e) {}
   }
 
@@ -7462,6 +7469,59 @@ showSheet = function(idx) {
       return rows.length - unique.length;
     }
     return 0;
+  };
+
+  // ─── Proteger ediciones locales de sobreescritura por sync remoto ───────────
+
+  // Mapa de celdas que el usuario editó en esta sesión → no sobreescribir al sincronizar
+  window._localDirtyIdx = window._localDirtyIdx || {};
+
+  // Registrar cada celda que el usuario toca (incluye borrar contenido)
+  document.addEventListener('input', function(e) {
+    var td = e.target.closest && e.target.closest('td[contenteditable]');
+    if (!td) return;
+    var wrap = td.closest('[id^="tablewrap_"]');
+    if (!wrap) return;
+    var idx = wrap.id.replace('tablewrap_', '');
+    if (idx === '16' || idx === '19') return;
+    if (!window._localDirtyIdx[idx]) window._localDirtyIdx[idx] = {};
+    var cells = Array.from(wrap.querySelectorAll('td[contenteditable]'));
+    var ci = cells.indexOf(td);
+    if (ci >= 0) window._localDirtyIdx[idx][ci] = true;
+  }, true);
+
+  // Merge remoto: aplica datos de Firebase PERO respeta las celdas que el usuario editó
+  window._mergeStaticFromRemote = function() {
+    try {
+      var raw = localStorage.getItem('bnl_static_v1');
+      if (!raw) return;
+      var data = JSON.parse(raw);
+      Object.keys(data).forEach(function(idx) {
+        if (isNaN(+idx) || +idx === 16 || +idx === 19) return;
+        var wrap = document.getElementById('tablewrap_' + idx);
+        if (!wrap) return;
+        var cells = Array.from(wrap.querySelectorAll('td[contenteditable]'));
+        var dirty = (window._localDirtyIdx || {})[idx] || {};
+        Object.keys(data[idx]).forEach(function(i) {
+          if (dirty[+i]) return; // el usuario editó esta celda → no tocar
+          var td = cells[+i];
+          if (!td) return;
+          var newVal = data[idx][i] !== undefined ? data[idx][i] : '';
+          if (td.textContent !== newVal) {
+            td.textContent = newVal;
+            td.classList.toggle('modified', newVal.trim() !== (td.dataset.orig || '').trim());
+          }
+        });
+        // También limpiar celdas que Firebase marca como vacías y no están sucias
+        cells.forEach(function(td, i) {
+          if (dirty[i]) return;
+          if (data[idx] && data[idx][i] !== undefined) return; // Firebase tiene valor, ya aplicado
+          // Firebase no tiene este índice (celda vacía o borrada por otro usuario)
+          // Solo limpiar si actualmente tiene contenido que vino de un sync previo
+          // (no tocar si textContent ≠ data-orig — podría ser edición local aún no guardada)
+        });
+      });
+    } catch(e) {}
   };
 
   // Exponer globalmente
@@ -7900,7 +7960,9 @@ showSheet = function(idx) {
         if (_origRestoreAll) _origRestoreAll();
         _restoreSheets_v2();
       } else if (key === 'bnl_static_v1') {
-        if (_origRestoreStatic) _origRestoreStatic();
+        // Merge seguro: no sobreescribe celdas que el usuario editó localmente
+        if (typeof window._mergeStaticFromRemote === 'function') window._mergeStaticFromRemote();
+        else if (_origRestoreStatic) _origRestoreStatic();
         else if (typeof restoreStaticSheets === 'function') restoreStaticSheets();
       } else if (key === 'bnl_acumulado_v1') {
         const d = JSON.parse(value);
