@@ -2299,8 +2299,7 @@ function showSheet(idx){
         }
       });
     }
-    setTimeout(cierreAutoCalc, 300);
-    setTimeout(cierreAutoCalc, 1800); // retry after Firebase/Acumulado finishes loading
+    setTimeout(cierreAutoCalc, 400);
   }
   // Sheet 19: calcular alertas de cobros al abrir la pestaña
   if (idx === 19 && typeof calcAlertasCobros === 'function') {
@@ -4413,6 +4412,9 @@ function calcAlertasCobros() {
 function cierreAutoCalc() {
   var wrap = document.getElementById('tablewrap_15');
   if (!wrap) return;
+  // No interrumpir si el usuario está editando en esta tabla
+  var _ae = document.activeElement;
+  if (_ae && wrap.contains(_ae)) return;
 
   // Read VD data: current day + acumulado (dedup by Id Orden)
   var rawRows = [].concat(liqReadRows(7), liqReadRows(22));
@@ -7907,7 +7909,9 @@ showSheet = function(idx) {
         if (d.bancolombia?.length) restoreToSheet(SHEET_MAP.dst.anticipos,  d.bancolombia);
         if (d.extracto?.length)    restoreToSheet(SHEET_MAP.dst.extracto,   d.extracto);
         if (typeof cur !== 'undefined' && cur === 15 && typeof cierreAutoCalc === 'function') {
-          setTimeout(cierreAutoCalc, 100);
+          var _wrap15 = document.getElementById('tablewrap_15');
+          var _ae = document.activeElement;
+          if (!_wrap15 || !_ae || !_wrap15.contains(_ae)) setTimeout(cierreAutoCalc, 200);
         }
       } else if (key === 'bnl_s16_v1') {
         try {
