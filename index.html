@@ -737,6 +737,45 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;fon
 .vb-total-bar .vb-bar-neg   { color: #fca5a5; font-weight: 600; font-family: monospace; }
 .vb-total-bar .vb-bar-neto  { color: #4ade80; font-weight: 800; font-family: monospace; font-size: 13px; }
 
+/* ── Date filter bar para Ventas Boletería ── */
+.vb-date-filter-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 16px; background: #f0fdf4; border-bottom: 1px solid #86efac;
+}
+.vb-date-filter-bar .vb-df-label {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 700; color: #166534; white-space: nowrap;
+}
+.vb-date-filter-bar .vb-df-field {
+  display: flex; align-items: center; gap: 5px;
+}
+.vb-date-filter-bar .vb-df-field span {
+  font-size: 11px; color: #374151; white-space: nowrap;
+}
+.vb-date-filter-bar input[type=date] {
+  padding: 4px 8px; border: 1px solid #86efac; border-radius: 6px;
+  font-size: 12px; background: #fff; color: #1e293b; cursor: pointer;
+  outline: none; transition: border-color .15s;
+}
+.vb-date-filter-bar input[type=date]:focus { border-color: #22c55e; box-shadow: 0 0 0 2px #bbf7d0; }
+.vb-date-badge {
+  background: #dcfce7; color: #166534; border: 1px solid #86efac;
+  border-radius: 12px; padding: 2px 10px; font-size: 11px; font-weight: 700;
+}
+.vb-date-results-wrap { overflow-x: auto; }
+.vb-date-results-wrap table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.vb-date-results-wrap th {
+  background: #e0f2fe; color: #0369a1; padding: 6px 10px;
+  font-size: 11px; font-weight: 700; white-space: nowrap;
+  border-bottom: 2px solid #bae6fd; text-align: right;
+}
+.vb-date-results-wrap th:first-child { text-align: left; }
+.vb-date-results-wrap td { padding: 5px 10px; border-bottom: 1px solid #f1f5f9; text-align: right; white-space: nowrap; }
+.vb-date-results-wrap td:first-child { text-align: left; font-weight: 600; color: #1e40af; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.vb-date-results-wrap tr:hover td { background: #f0f9ff; }
+.vb-date-results-wrap .vb-dr-total td { background: #f0fdf4; font-weight: 800; border-top: 2px solid #86efac; color: #166534; }
+.vb-date-results-wrap .vb-dr-header { padding: 10px 14px 4px; font-size: 12px; color: #0369a1; font-weight: 700; }
+
 /* ── MP Comisión detail panel v2 ── */
 .mp-detail-bar {
   padding: 0;
@@ -1629,6 +1668,23 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;fon
     <div class="mp-comm-empty">Haz clic en <strong>Calcular desde Mercado Pago</strong> para ver la comisión cobrada por evento y el neto real.</div>
   </div>
 </div>
+<div class="vb-date-filter-bar" id="vb-date-filter-bar">
+  <div class="vb-df-label">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    Filtrar por fecha
+  </div>
+  <div class="vb-df-field">
+    <span>Desde</span>
+    <input type="date" id="vb-date-from" onchange="vbApplyDateFilter()">
+  </div>
+  <div class="vb-df-field">
+    <span>Hasta</span>
+    <input type="date" id="vb-date-to" onchange="vbApplyDateFilter()">
+  </div>
+  <button class="btn btn-ghost" id="vb-date-clear" onclick="vbClearDateFilter()" style="display:none;color:#dc2626;border-color:#fca5a5;">✕ Limpiar</button>
+  <span id="vb-date-badge" class="vb-date-badge" style="display:none;"></span>
+</div>
+<div id="vb-date-results" style="display:none;"></div>
 <div class="mp-detail-controls" style="background:#e0f2fe;border-bottom:1px solid #bae6fd;">
   <div class="mp-det-ctrl-group">
     <label>Selecciona el evento</label>
@@ -5341,6 +5397,142 @@ function onVbEventSelect(code) {
     if (!cellCode || cellCode === 'Código evento') { tr.style.display = ''; return; }
     tr.style.display = cellCode === code ? '' : 'none';
   });
+}
+
+function vbApplyDateFilter() {
+  var from  = (document.getElementById('vb-date-from')  || {}).value || '';
+  var to    = (document.getElementById('vb-date-to')    || {}).value || '';
+  var clearBtn   = document.getElementById('vb-date-clear');
+  var badge      = document.getElementById('vb-date-badge');
+  var resultsDiv = document.getElementById('vb-date-results');
+  var wrap       = document.getElementById('tablewrap_9');
+  var empty      = document.getElementById('vb-empty-state');
+  var evtCtrl    = document.querySelector('.mp-detail-controls[id!="mp-comm-filter-wrap"]');
+
+  if (!from && !to) {
+    if (clearBtn) clearBtn.style.display = 'none';
+    if (badge)    { badge.style.display = 'none'; badge.textContent = ''; }
+    if (resultsDiv) resultsDiv.style.display = 'none';
+    var sel = document.getElementById('vb-event-select');
+    var code = sel ? sel.value : '';
+    if (code) {
+      if (wrap)  wrap.style.display  = '';
+      if (empty) empty.style.display = 'none';
+    } else {
+      if (wrap)  wrap.style.display  = 'none';
+      if (empty) empty.style.display = '';
+    }
+    return;
+  }
+
+  if (clearBtn) clearBtn.style.display = '';
+
+  // Leer todos los datos VD + Acumulado, deduplicando por Id Orden
+  var rawRows = [].concat(liqReadRows(7), liqReadRows(22));
+  var seen = {};
+  var byEvent = {};
+  var totalVentas = 0;
+
+  for (var ri = 0; ri < rawRows.length; ri++) {
+    var r = rawRows[ri];
+    var id = (r[0] || '').trim();
+    if (!id || id === 'Id Orden' || !/^\d{4,}$/.test(id)) continue;
+    if (seen[id]) continue;
+    seen[id] = true;
+
+    // Buscar fecha en columnas 1-14
+    var fecha = '';
+    for (var c = 1; c < Math.min(r.length, 15); c++) {
+      var fm = (r[c] || '').match(/(\d{4}-\d{2}-\d{2})/);
+      if (fm) { fecha = fm[1]; break; }
+    }
+    if (!fecha) continue;
+
+    // Aplicar filtro de rango
+    if (from && fecha < from) continue;
+    if (to   && fecha > to)   continue;
+
+    totalVentas++;
+    var evt = (r[11] || '').trim() || '(sin evento)';
+    if (!byEvent[evt]) byEvent[evt] = { boletas:0, valor:0, total:0, servicioWeb:0, efectivo:0, promotor:0, web:0, ordenes:0 };
+    var d = byEvent[evt];
+    d.boletas    += liqNum(r[2]  || '1');
+    d.valor      += liqNum(r[3]  || '0');
+    d.total      += liqNum(r[8]  || r[3] || '0');
+    d.servicioWeb+= liqNum(r[5]  || '0');
+    d.ordenes++;
+    var metodo = ((r[7] || '') + ' ' + (r[6] || '')).toLowerCase();
+    if (metodo.includes('efectivo'))       d.efectivo += liqNum(r[8] || r[3] || '0');
+    else if (metodo.includes('promotor'))  d.promotor += liqNum(r[8] || r[3] || '0');
+    else                                   d.web      += liqNum(r[8] || r[3] || '0');
+  }
+
+  // Badge
+  var rangLabel = (from && to && from === to) ? from
+    : (from && to ? from + ' → ' + to : from ? 'desde ' + from : 'hasta ' + to);
+  if (badge) { badge.textContent = totalVentas + ' ventas · ' + rangLabel; badge.style.display = ''; }
+
+  // Ocultar tabla estática, mostrar resultados dinámicos
+  if (wrap)  wrap.style.display  = 'none';
+  if (empty) empty.style.display = 'none';
+  if (!resultsDiv) return;
+  resultsDiv.style.display = '';
+
+  if (totalVentas === 0) {
+    resultsDiv.innerHTML = '<div class="mp-detail-empty">No se encontraron ventas en el rango seleccionado.</div>';
+    return;
+  }
+
+  var evts = Object.keys(byEvent).sort();
+  var html = '<div class="vb-date-results-wrap">';
+  html += '<div class="vb-dr-header">📅 ' + rangLabel + '  —  <strong>' + totalVentas + '</strong> ventas en <strong>' + evts.length + '</strong> evento(s)</div>';
+  html += '<table><thead><tr>';
+  html += '<th style="text-align:left;">Evento</th>';
+  html += '<th>Boletas</th><th># Ventas</th>';
+  html += '<th>Venta bruta</th><th>Total cobrado</th>';
+  html += '<th>Efectivo</th><th>Promotor</th><th>Web / Tarjeta</th>';
+  html += '<th>Serv. Web</th>';
+  html += '</tr></thead><tbody>';
+
+  var totBoletas=0, totValor=0, totTotal=0, totEfec=0, totProm=0, totWeb=0, totSW=0;
+  for (var ei = 0; ei < evts.length; ei++) {
+    var ev = evts[ei], d = byEvent[ev];
+    totBoletas+=d.boletas; totValor+=d.valor; totTotal+=d.total;
+    totEfec+=d.efectivo; totProm+=d.promotor; totWeb+=d.web; totSW+=d.servicioWeb;
+    html += '<tr>';
+    html += '<td>' + ev + '</td>';
+    html += '<td style="font-family:monospace;">' + Math.round(d.boletas).toLocaleString('es-CO') + '</td>';
+    html += '<td style="font-family:monospace;">' + d.ordenes + '</td>';
+    html += '<td style="font-family:monospace;">' + liqFmt(d.valor) + '</td>';
+    html += '<td style="font-family:monospace;font-weight:700;color:#166534;">' + liqFmt(d.total) + '</td>';
+    html += '<td style="font-family:monospace;">' + liqFmt(d.efectivo) + '</td>';
+    html += '<td style="font-family:monospace;">' + liqFmt(d.promotor) + '</td>';
+    html += '<td style="font-family:monospace;">' + liqFmt(d.web) + '</td>';
+    html += '<td style="font-family:monospace;color:#dc2626;">' + liqFmt(d.servicioWeb) + '</td>';
+    html += '</tr>';
+  }
+
+  html += '<tr class="vb-dr-total">';
+  html += '<td>TOTAL</td>';
+  html += '<td style="font-family:monospace;">' + Math.round(totBoletas).toLocaleString('es-CO') + '</td>';
+  html += '<td style="font-family:monospace;">' + totalVentas + '</td>';
+  html += '<td style="font-family:monospace;">' + liqFmt(totValor) + '</td>';
+  html += '<td style="font-family:monospace;">' + liqFmt(totTotal) + '</td>';
+  html += '<td style="font-family:monospace;">' + liqFmt(totEfec) + '</td>';
+  html += '<td style="font-family:monospace;">' + liqFmt(totProm) + '</td>';
+  html += '<td style="font-family:monospace;">' + liqFmt(totWeb) + '</td>';
+  html += '<td style="font-family:monospace;color:#dc2626;">' + liqFmt(totSW) + '</td>';
+  html += '</tr>';
+  html += '</tbody></table></div>';
+  resultsDiv.innerHTML = html;
+}
+
+function vbClearDateFilter() {
+  var f = document.getElementById('vb-date-from');
+  var t = document.getElementById('vb-date-to');
+  if (f) f.value = '';
+  if (t) t.value = '';
+  vbApplyDateFilter();
 }
 
 // Auto-recalculate when sheet 9 is shown
