@@ -1725,7 +1725,7 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;fon
       <span class="row-badge" id="info_11"></span>
     </div>
     <div class="toolbar-right">
-      <button class="btn btn-export" onclick="exportCSV(11,'Resumen Diario')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Exportar CSV</button><span class="upload-status" id="status_11"></span>
+      <button class="btn btn-ghost" onclick="calcResumenDiario()" title="Recalcular totales por día"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Recalcular</button><button class="btn btn-export" onclick="exportCSV(11,'Resumen Diario')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Exportar CSV</button><span class="upload-status" id="status_11"></span>
     </div>
   </div>
   <div class="table-scroll" id="tablewrap_11">
@@ -2300,6 +2300,10 @@ function showSheet(idx){
       });
     }
     setTimeout(cierreAutoCalc, 400);
+  }
+  // Sheet 11: calcular Resumen Diario al abrir la pestaña
+  if (idx === 11 && typeof calcResumenDiario === 'function') {
+    setTimeout(calcResumenDiario, 400);
   }
   // Sheet 19: calcular alertas de cobros al abrir la pestaña
   if (idx === 19 && typeof calcAlertasCobros === 'function') {
@@ -4462,6 +4466,155 @@ function cierreAutoCalc() {
       tds[3].textContent = fmtOrd;
     }
   }
+}
+
+// ── Resumen Diario (sheet 11): rellenar totales por día desde datos cargados ──
+function calcResumenDiario() {
+  var wrap = document.getElementById('tablewrap_11');
+  if (!wrap) return;
+
+  // Helper: parsear fecha con formatos adicionales (ej: "12 may 2026 12:42 hs")
+  function _parseMpFecha(s) {
+    if (!s) return '';
+    s = String(s).trim();
+    var d = _normFechaB17(s);
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    var meses = {ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12};
+    var m = s.match(/^(\d{1,2})\s+([a-záéíóúñ]+)\s+(\d{4})/i);
+    if (!m) m = s.match(/^(\d{1,2})\s+([a-záéíóúñ]+)/i);
+    if (m) {
+      var mon = meses[(m[2]||'').toLowerCase().substring(0,3)];
+      if (mon) {
+        var yr = m[3] ? +m[3] : new Date().getFullYear();
+        return yr + '-' + String(mon).padStart(2,'0') + '-' + String(+m[1]).padStart(2,'0');
+      }
+    }
+    return '';
+  }
+
+  // 1. Leer VD: sheets 7+22, dedup por Id Orden, agrupar por fecha
+  var rawVD = [].concat(liqReadRows(7), liqReadRows(22));
+  var seenVD = {};
+  var byDate = {};
+  for (var vi = 0; vi < rawVD.length; vi++) {
+    var r = rawVD[vi];
+    var id = (r[0]||'').trim();
+    if (!id || !/^\d{4,}$/.test(id)) continue;
+    if (seenVD[id]) continue;
+    seenVD[id] = true;
+    var fecha = '';
+    for (var c = 1; c < Math.min(r.length, 15); c++) {
+      if (/\d{4}-\d{2}-\d{2}/.test(r[c]||'')) { fecha = r[c]; break; }
+    }
+    if (!fecha) continue;
+    var dk = fecha.substring(0, 10);
+    if (!byDate[dk]) byDate[dk] = { ordenes:0, boletas:0, total:0, efectivo:0, promotor:0, bancolombia:0 };
+    var dv = byDate[dk];
+    dv.ordenes++;
+    dv.boletas += liqNum(r[2]||'0');
+    var rowTotal = liqNum(r[8]||'0');
+    dv.total += rowTotal;
+    var met = ((r[6]||'') + ' ' + (r[7]||'')).toLowerCase();
+    if (met.includes('efectivo')) dv.efectivo += rowTotal;
+    else if (met.includes('promotor')) dv.promotor += rowTotal;
+    else if (met.includes('consignaci') || met.includes('bancolombia') || met.includes('transferencia')) dv.bancolombia += rowTotal;
+  }
+
+  // 2. Leer MP: sheets 8+23, agrupar por fecha si disponible
+  var rawMP = [].concat(liqReadRows(8), liqReadRows(23));
+  var byDateMP = {};
+  for (var mi = 0; mi < rawMP.length; mi++) {
+    var rm = rawMP[mi];
+    if (!/^\d{8,}$/.test((rm[0]||'').trim())) continue;
+    var est = (rm[2]||'').toLowerCase();
+    if (est && !est.includes('aprobado') && !est.includes('approved')) continue;
+    var mpFecha = _parseMpFecha(rm[1]||'');
+    if (!mpFecha || !/^\d{4}-\d{2}-\d{2}$/.test(mpFecha)) continue;
+    if (!byDateMP[mpFecha]) byDateMP[mpFecha] = { txCount:0, bruto:0, cargos:0, neto:0 };
+    byDateMP[mpFecha].txCount++;
+    byDateMP[mpFecha].bruto  += liqNum(rm[4]||'0');
+    byDateMP[mpFecha].cargos += Math.abs(liqNum(rm[5]||'0'));
+    byDateMP[mpFecha].neto   += liqNum(rm[8]||'0');
+  }
+
+  // 3. Leer Anticipos (sheet 16): r[1]=#, r[8]=FechaPago, r[6]=MontoAprobado
+  var rawS16 = liqReadRows(16);
+  var byDateAnticipo = {};
+  for (var ai = 0; ai < rawS16.length; ai++) {
+    var ra = rawS16[ai];
+    if (ra.length < 9) continue;
+    var anum = (ra[1]||'').trim();
+    if (!anum || !/^\d+$/.test(anum)) continue;
+    var afecha = _normFechaB17(ra[8]||'');
+    if (!afecha || !/^\d{4}-\d{2}-\d{2}$/.test(afecha)) continue;
+    var rawM = (ra[6]||'').replace(/[$\s]/g,'').trim();
+    var pm = Math.abs(liqNum(ra[6]||'0'));
+    var monto = /,\d{2}$/.test(rawM) && pm < 100000 ? Math.round(pm * 1000) : Math.round(pm);
+    if (!byDateAnticipo[afecha]) byDateAnticipo[afecha] = 0;
+    byDateAnticipo[afecha] += monto;
+  }
+
+  // 4. Leer Estado del día de Cierre Diario (sheet 15): tds[1]=Fecha, tds[12]=Estado
+  var estadoByDate = {};
+  var wrap15 = document.getElementById('tablewrap_15');
+  if (wrap15) {
+    Array.from(wrap15.querySelectorAll('tbody tr')).forEach(function(tr) {
+      var tds15 = tr.querySelectorAll('td');
+      if (tds15.length < 13) return;
+      var fm = (tds15[1].textContent||'').trim().match(/(\d{4}-\d{2}-\d{2})/);
+      if (fm) estadoByDate[fm[1]] = (tds15[12].textContent||'').trim();
+    });
+  }
+
+  // 5. Actualizar filas de datos (15 celdas por fila: tds[0]=vacío, tds[1]=Fecha, tds[2]=DiaSemana, tds[3..14]=datos)
+  var rows = Array.from(wrap.querySelectorAll('tbody tr'));
+  var tot = { ordenes:0, boletas:0, total:0, txMP:0, brutoMP:0, cargosMP:0, netoMP:0, efec:0, prom:0, banc:0, anti:0 };
+  rows.forEach(function(tr) {
+    var tds = tr.querySelectorAll('td');
+    if (tds.length < 15) return; // omitir filas de cabecera/total que tienen menos celdas
+    var fm = (tds[1].textContent||'').trim().match(/(\d{4}-\d{2}-\d{2})/);
+    if (!fm) return; // omitir fila si tds[1] no tiene fecha
+    var dk = fm[1];
+    var vd = byDate[dk]||{};
+    var mp = byDateMP[dk]||{};
+    var anti = byDateAnticipo[dk]||0;
+    var ord=vd.ordenes||0, bol=vd.boletas||0, tot5=vd.total||0;
+    var efec=vd.efectivo||0, prom=vd.promotor||0, banc=vd.bancolombia||0;
+    var txMP=mp.txCount||0, bruto=mp.bruto||0, cargos=mp.cargos||0, neto=mp.neto||0;
+    tds[3].textContent  = String(ord);
+    tds[4].textContent  = Math.round(bol).toLocaleString('es-CO');
+    tds[5].textContent  = '$' + Math.round(tot5).toLocaleString('es-CO');
+    tds[6].textContent  = String(txMP);
+    tds[7].textContent  = bruto  ? '$' + Math.round(bruto).toLocaleString('es-CO')  : '$0';
+    tds[8].textContent  = cargos ? '$' + Math.round(cargos).toLocaleString('es-CO') : '$0';
+    tds[9].textContent  = neto   ? '$' + Math.round(neto).toLocaleString('es-CO')   : '$0';
+    tds[10].textContent = efec   ? '$' + Math.round(efec).toLocaleString('es-CO')   : '$0';
+    tds[11].textContent = prom   ? '$' + Math.round(prom).toLocaleString('es-CO')   : '$0';
+    tds[12].textContent = banc   ? '$' + Math.round(banc).toLocaleString('es-CO')   : '$0';
+    tds[13].textContent = anti   ? '$' + Math.round(anti).toLocaleString('es-CO')   : '$0';
+    if (tds[14]) tds[14].textContent = estadoByDate[dk]||'';
+    tot.ordenes+=ord; tot.boletas+=bol; tot.total+=tot5;
+    tot.txMP+=txMP; tot.brutoMP+=bruto; tot.cargosMP+=cargos; tot.netoMP+=neto;
+    tot.efec+=efec; tot.prom+=prom; tot.banc+=banc; tot.anti+=anti;
+  });
+
+  // 6. Actualizar fila TOTAL AÑO (14 celdas: tds[0]=vacío, tds[1]=TOTAL colspan2, tds[2..13]=valores)
+  rows.forEach(function(tr) {
+    var tds = tr.querySelectorAll('td');
+    if (tds.length !== 14) return;
+    if (!(tds[1].textContent||'').toUpperCase().includes('TOTAL')) return;
+    tds[2].textContent  = String(tot.ordenes);
+    tds[3].textContent  = Math.round(tot.boletas).toLocaleString('es-CO');
+    tds[4].textContent  = '$' + Math.round(tot.total).toLocaleString('es-CO');
+    tds[5].textContent  = String(tot.txMP);
+    tds[6].textContent  = '$' + Math.round(tot.brutoMP).toLocaleString('es-CO');
+    tds[7].textContent  = '$' + Math.round(tot.cargosMP).toLocaleString('es-CO');
+    tds[8].textContent  = '$' + Math.round(tot.netoMP).toLocaleString('es-CO');
+    tds[9].textContent  = '$' + Math.round(tot.efec).toLocaleString('es-CO');
+    tds[10].textContent = '$' + Math.round(tot.prom).toLocaleString('es-CO');
+    tds[11].textContent = '$' + Math.round(tot.banc).toLocaleString('es-CO');
+    tds[12].textContent = tot.anti ? '$' + Math.round(tot.anti).toLocaleString('es-CO') : '$0';
+  });
 }
 
 // ── Get all event codes from Eventos sheet (sheet 4) ──
@@ -7952,6 +8105,11 @@ showSheet = function(idx) {
           if (idx === 7 && typeof cierreAutoCalc === 'function') {
             setTimeout(cierreAutoCalc, 1000);
           }
+          // Auto-calcular Resumen Diario al cargar Ventas Diarias o MP
+          if ((idx === 7 || idx === 8) && typeof calcResumenDiario === 'function') {
+            var _cur11 = typeof cur !== 'undefined' ? cur : -1;
+            if (_cur11 === 11) setTimeout(calcResumenDiario, 1200);
+          }
         } catch(e) { console.error('[Sheets] Error crítico:', e); }
       }
     };
@@ -7995,6 +8153,9 @@ showSheet = function(idx) {
           var _wrap15 = document.getElementById('tablewrap_15');
           var _ae = document.activeElement;
           if (!_wrap15 || !_ae || !_wrap15.contains(_ae)) setTimeout(cierreAutoCalc, 200);
+        }
+        if (typeof cur !== 'undefined' && cur === 11 && typeof calcResumenDiario === 'function') {
+          setTimeout(calcResumenDiario, 300);
         }
       } else if (key === 'bnl_s16_v1') {
         try {
