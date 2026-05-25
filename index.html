@@ -1750,7 +1750,7 @@ empresa (10%)</td></tr><tr><td style="font-size:11.0px" contenteditable="true" d
       <span class="row-badge" id="info_15"></span>
     </div>
     <div class="toolbar-right">
-      <button class="btn btn-ghost" onclick="resetSheet(15)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.87"/></svg> Restaurar</button><button class="btn btn-export" onclick="exportCSV(15,'Cierre Diario')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Exportar CSV</button>
+      <button class="btn btn-ghost" onclick="cierreAutoCalc()" title="Recalcular totales automáticos"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Recalcular</button><button class="btn btn-ghost" onclick="resetSheet(15)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.87"/></svg> Restaurar</button><button class="btn btn-export" onclick="exportCSV(15,'Cierre Diario')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Exportar CSV</button>
     </div>
   </div><div class="edit-notice"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Hoja editable — Tab/Enter para navegar entre celdas · Las celdas modificadas se resaltan <span class="dot-mod"></span><span class="upload-status" id="status_15"></span></div>
   <div class="table-scroll" id="tablewrap_15">
@@ -2243,7 +2243,8 @@ function showSheet(idx){
         }
       });
     }
-    setTimeout(cierreAutoCalc, 80);
+    setTimeout(cierreAutoCalc, 300);
+    setTimeout(cierreAutoCalc, 1800); // retry after Firebase/Acumulado finishes loading
   }
   // Sheet 19: calcular alertas de cobros al abrir la pestaña
   if (idx === 19 && typeof calcAlertasCobros === 'function') {
@@ -4369,9 +4370,9 @@ function cierreAutoCalc() {
     if (seen[id]) continue;
     seen[id] = true;
 
-    // Find fecha: scan cols 1-5 for a date pattern
+    // Find fecha: scan cols 1-14 for a date pattern
     var fecha = '';
-    for (var c = 1; c < Math.min(r.length, 6); c++) {
+    for (var c = 1; c < Math.min(r.length, 15); c++) {
       if (/\d{4}-\d{2}-\d{2}/.test(r[c] || '')) { fecha = r[c]; break; }
     }
     if (!fecha) continue;
@@ -7672,6 +7673,9 @@ showSheet = function(idx) {
         if (d.mp?.length)          restoreToSheet(SHEET_MAP.dst.mp,         d.mp);
         if (d.bancolombia?.length) restoreToSheet(SHEET_MAP.dst.anticipos,  d.bancolombia);
         if (d.extracto?.length)    restoreToSheet(SHEET_MAP.dst.extracto,   d.extracto);
+        if (typeof cur !== 'undefined' && cur === 15 && typeof cierreAutoCalc === 'function') {
+          setTimeout(cierreAutoCalc, 100);
+        }
       } else if (key === 'bnl_s16_v1') {
         try {
           const d = JSON.parse(value);
