@@ -2227,6 +2227,24 @@ function showSheet(idx){
   document.getElementById('title-bar').textContent=NAMES[idx];
   clearSearch();
   cur=idx;
+  // Sheet 15: auto-calcular Cierre Diario al abrir la pestaña
+  if (idx === 15 && typeof cierreAutoCalc === 'function') {
+    var _w15 = document.getElementById('tablewrap_15');
+    if (_w15 && !_w15._cierreListenerSet) {
+      _w15._cierreListenerSet = true;
+      var _cierreTimer;
+      _w15.addEventListener('input', function(e) {
+        var td = e.target.closest('td');
+        if (!td) return;
+        var tds = td.closest('tr').querySelectorAll('td');
+        if (tds.length > 1 && tds[1] === td) {
+          clearTimeout(_cierreTimer);
+          _cierreTimer = setTimeout(cierreAutoCalc, 500);
+        }
+      });
+    }
+    setTimeout(cierreAutoCalc, 80);
+  }
   // Sheet 19: calcular alertas de cobros al abrir la pestaña
   if (idx === 19 && typeof calcAlertasCobros === 'function') {
     setTimeout(calcAlertasCobros, 50);
@@ -4331,6 +4349,59 @@ function calcAlertasCobros() {
       try { localStorage.setItem('bnl_alertas_v1', json); } catch(e2) {}
       if (typeof window._fbForceWrite === 'function') window._fbForceWrite('bnl_alertas_v1', json);
     });
+  }
+}
+
+// ── Cierre Diario: auto-calcular Total ventas y # órdenes por fecha ──
+function cierreAutoCalc() {
+  var wrap = document.getElementById('tablewrap_15');
+  if (!wrap) return;
+
+  // Read VD data: current day + acumulado (dedup by Id Orden)
+  var rawRows = [].concat(liqReadRows(7), liqReadRows(22));
+  var seen = {};
+  var byDate = {};
+
+  for (var ri = 0; ri < rawRows.length; ri++) {
+    var r = rawRows[ri];
+    var id = (r[0] || '').trim();
+    if (!id || id === 'Id Orden' || !/^\d{4,}$/.test(id)) continue;
+    if (seen[id]) continue;
+    seen[id] = true;
+
+    // Find fecha: scan cols 1-5 for a date pattern
+    var fecha = '';
+    for (var c = 1; c < Math.min(r.length, 6); c++) {
+      if (/\d{4}-\d{2}-\d{2}/.test(r[c] || '')) { fecha = r[c]; break; }
+    }
+    if (!fecha) continue;
+
+    var dk = fecha.substring(0, 10); // YYYY-MM-DD
+    if (!byDate[dk]) byDate[dk] = { total: 0, ordenes: 0 };
+    byDate[dk].total += liqNum(r[8] || r[3]);
+    byDate[dk].ordenes++;
+  }
+
+  // Fill auto cells in each data row
+  var rows = Array.from(wrap.querySelectorAll('tbody tr'));
+  for (var i = 0; i < rows.length; i++) {
+    var tds = rows[i].querySelectorAll('td');
+    if (tds.length < 4) continue;
+    var fechaTxt = (tds[1].textContent || '').trim();
+    var m = fechaTxt.match(/(\d{4}-\d{2}-\d{2})/);
+    if (!m) continue;
+    var dk = m[1];
+    if (!byDate[dk]) continue;
+
+    var fmtTotal  = '$' + Math.round(byDate[dk].total).toLocaleString('es-CO');
+    var fmtOrd    = String(byDate[dk].ordenes);
+
+    if (tds[2].textContent.trim() !== fmtTotal) {
+      tds[2].textContent = fmtTotal;
+    }
+    if (tds[3].textContent.trim() !== fmtOrd) {
+      tds[3].textContent = fmtOrd;
+    }
   }
 }
 
@@ -7559,6 +7630,10 @@ showSheet = function(idx) {
           // Auto-calcular alertas de cobros al cargar Ventas Diarias
           if (idx === 7 && typeof calcAlertasCobros === 'function') {
             setTimeout(calcAlertasCobros, 900);
+          }
+          // Auto-calcular Cierre Diario al cargar Ventas Diarias
+          if (idx === 7 && typeof cierreAutoCalc === 'function') {
+            setTimeout(cierreAutoCalc, 1000);
           }
         } catch(e) { console.error('[Sheets] Error crítico:', e); }
       }
