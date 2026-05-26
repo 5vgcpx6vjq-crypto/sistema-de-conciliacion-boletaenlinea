@@ -3423,6 +3423,18 @@ async function importBackupHtml(file) {
         window._fbForceWrite('bnl_sheets_v2', s2empty);
       }
     } catch(e) {}
+    // Limpiar Conciliación MP (hoja 14) — sus celdas editables son datos diarios
+    try {
+      const wrap14 = document.getElementById('tablewrap_14');
+      if (wrap14) {
+        wrap14.querySelectorAll('td[contenteditable]').forEach(td => {
+          td.textContent = td.dataset.orig || '';
+          td.classList.remove('modified');
+        });
+      }
+      // Re-guardar static sheets sin los datos de sheet 14 en Firebase
+      if (typeof saveStaticSheets === 'function') saveStaticSheets();
+    } catch(e) {}
     showToast(
       '✅ Backup importado y sincronizado en nube',
       `BNL: ${bnl.length} · MP: ${mp.length} · Bancolombia: ${bancolombia.length} · Extracto: ${extracto.length} filas`
