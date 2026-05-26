@@ -3261,6 +3261,8 @@ const SHEET_MAP = {
 
 // ── On page load: restore accumulated data from localStorage ────────
 window.addEventListener('DOMContentLoaded', () => {
+  // Limpiar datos hardcodeados de Conciliación MP al cargar la página
+  setTimeout(() => { if (typeof clearConcilMP === 'function') clearConcilMP(); }, 0);
   try {
     const stored = localStorage.getItem(BK_LS_KEY);
     if (!stored) return;
@@ -7084,6 +7086,47 @@ if (_vdOrigUpdateCount) {
 // Genera las dos tablas de diferencias automáticamente
 // ════════════════════════════════════════════════════════════════
 
+function clearConcilMP() {
+  const tbl14 = document.querySelector('#sheet_14 .sheet-table');
+  if (!tbl14) return;
+  const tbody = tbl14.querySelector('tbody');
+  if (!tbody) return;
+  const allRows = Array.from(tbody.querySelectorAll('tr'));
+  let bnlHdrIdx = -1, mpHdrIdx = -1;
+  allRows.forEach((tr, i) => {
+    if (tr.textContent.includes('ÓRDENES DE BOLETAENLINEA QUE NO ESTÁN')) bnlHdrIdx = i;
+    if (tr.textContent.includes('TRANSACCIONES DE MERCADO PAGO SIN ORDEN')) mpHdrIdx = i;
+  });
+  // Eliminar filas de datos de la sección BNL
+  if (bnlHdrIdx >= 0 && mpHdrIdx >= 0) {
+    for (let i = mpHdrIdx - 1; i >= bnlHdrIdx + 3; i--) {
+      if (allRows[i]) tbody.removeChild(allRows[i]);
+    }
+  }
+  // Eliminar filas de datos de la sección MP (desde mpHdr+3 hasta el final, conservando la última fila vacía)
+  const rows2 = Array.from(tbody.querySelectorAll('tr'));
+  let mpIdx2 = -1;
+  rows2.forEach((tr, i) => { if (tr.textContent.includes('TRANSACCIONES DE MERCADO PAGO SIN ORDEN')) mpIdx2 = i; });
+  if (mpIdx2 >= 0) {
+    const last = rows2[rows2.length - 1];
+    const lastIsEmpty = last && !last.textContent.trim();
+    const endIdx = lastIsEmpty ? rows2.length - 2 : rows2.length - 1;
+    for (let i = endIdx; i >= mpIdx2 + 3; i--) {
+      if (rows2[i]) tbody.removeChild(rows2[i]);
+    }
+  }
+  // Limpiar celdas de resumen (solo las que tienen valores numéricos/monetarios calculados)
+  const LABELS = ['Total ventas BNL', '# Órdenes', 'Total cuadrado', 'Descuadres', 'Cargos retenidos', 'DINERO NETO'];
+  tbody.querySelectorAll('tr').forEach(tr => {
+    const txt = tr.textContent;
+    if (!LABELS.some(l => txt.includes(l))) return;
+    Array.from(tr.querySelectorAll('td')).forEach((td, ci) => {
+      if (ci < 2 || td.hasAttribute('contenteditable')) return;
+      if (/[\d\$]/.test(td.textContent) && !td.colSpan > 1) td.textContent = '';
+    });
+  });
+}
+
 function mpCruce() {
   const panel14 = document.getElementById('sheet_14');
   if (!panel14) return;
@@ -7109,7 +7152,7 @@ function mpCruce() {
     return estado === 'approved' || estado === 'aprobado' || estado.includes('aprobad');
   });
 
-  if (!bnlOrders.length && !mpAprobadas.length) return;
+  if (!bnlOrders.length && !mpAprobadas.length) { clearConcilMP(); return; }
 
   // ── 2. Construir mapa de IDs de BNL ──
   const bnlIdSet = new Set(bnlOrders.map(r => String(r[0] || '').trim()).filter(id => /^\d{4,}$/.test(id)));
