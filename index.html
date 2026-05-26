@@ -7959,6 +7959,74 @@ showSheet = function(idx) {
   window._s16Restore         = _s16Restore;
   window._s16Save            = _s16Save;
 
+  // ── Cierre Diario (sheet 15) — save/restore dedicado por clave de fecha ──
+  // Guarda por td[1].textContent como clave (fecha o texto escrito por usuario).
+  // Independiente de saveStaticSheets para evitar corrupción por cambios de DOM.
+  let _s15Dirty = false;
+  let _s15RestoreTimer = null;
+
+  function saveS15() {
+    if (window._s15Restoring) return;
+    const wrap = document.getElementById('tablewrap_15');
+    if (!wrap) return;
+    const rows = [];
+    Array.from(wrap.querySelectorAll('tbody tr')).forEach(function(tr, idx) {
+      const tds = Array.from(tr.querySelectorAll('td'));
+      if (tds.length < 2) return;
+      const hasContent = tds.slice(1).some(function(td) { return td.textContent.trim() !== ''; });
+      if (!hasContent) return;
+      rows.push({ key: tds[1].textContent.trim(), idx: idx, cells: tds.map(function(td) { return td.textContent; }) });
+    });
+    if (!rows.length) return;
+    _s15Dirty = false;
+    const json = JSON.stringify({ rows: rows, _ts: Date.now() });
+    try { localStorage.setItem('bnl_s15_v1', json); } catch(e) {}
+    if (typeof window._fbForceWrite === 'function') window._fbForceWrite('bnl_s15_v1', json);
+  }
+
+  function restoreS15() {
+    try {
+      const raw = localStorage.getItem('bnl_s15_v1');
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (!d || !Array.isArray(d.rows) || !d.rows.length) return;
+      const wrap = document.getElementById('tablewrap_15');
+      if (!wrap) return;
+      window._s15Restoring = true;
+      const allRows = Array.from(wrap.querySelectorAll('tbody tr'));
+      const keyMap = {};
+      allRows.forEach(function(tr, i) {
+        const tds = tr.querySelectorAll('td');
+        if (tds.length >= 2) { const k = tds[1].textContent.trim(); if (k) keyMap[k] = { tr: tr, idx: i }; }
+      });
+      d.rows.forEach(function(saved) {
+        if (!saved.cells || !saved.cells.length) return;
+        let targetTr = null;
+        if (saved.key && keyMap[saved.key]) {
+          targetTr = keyMap[saved.key].tr;
+        } else if (typeof saved.idx === 'number' && allRows[saved.idx]) {
+          targetTr = allRows[saved.idx];
+        }
+        if (!targetTr) return;
+        const tds = Array.from(targetTr.querySelectorAll('td'));
+        saved.cells.forEach(function(val, ci) {
+          const td = tds[ci];
+          if (!td || !td.hasAttribute('contenteditable')) return;
+          if (td.textContent !== val) {
+            td.textContent = val;
+            td.classList.toggle('modified', val.trim() !== (td.dataset.orig || '').trim());
+          }
+        });
+      });
+      window._s15Restoring = false;
+    } catch(e) { window._s15Restoring = false; }
+  }
+
+  window.saveS15    = saveS15;
+  window.restoreS15 = restoreS15;
+
+  let _t15 = null;
+
   // Guardar al salir de cualquier celda editable
   let _t = null;
   document.addEventListener('blur', function(e) {
@@ -7966,6 +8034,13 @@ showSheet = function(idx) {
     // Sheet 16: guardar al instante (sin debounce)
     if (e.target.closest('#tablewrap_16')) {
       _s16SaveNow();
+      return;
+    }
+    // Sheet 15: guardar con debounce dedicado
+    if (e.target.closest('#tablewrap_15')) {
+      _s15Dirty = true;
+      clearTimeout(_t15);
+      _t15 = setTimeout(saveS15, 800);
       return;
     }
     clearTimeout(_t);
@@ -7982,12 +8057,19 @@ showSheet = function(idx) {
       _s16SaveNow();
       return;
     }
+    if (active.closest('#tablewrap_15')) {
+      _s15Dirty = true;
+      clearTimeout(_t15);
+      _t15 = setTimeout(saveS15, 200);
+      return;
+    }
     clearTimeout(_t);
     _t = setTimeout(saveStaticSheets, 200);
   }, true);
 
-  // Guardado periódico cada 20 segundos — solo para hojas != 16
+  // Guardado periódico cada 20 segundos — solo para hojas != 15/16
   setInterval(saveStaticSheets, 20000);
+  setInterval(function() { if (_s15Dirty) saveS15(); }, 20000);
 
   // Flag: true solo si el usuario hizo cambios en ESTA pestaña desde el último guardado
   // Evita que otras pestañas sobreescriban Firebase con datos viejos
@@ -8004,6 +8086,15 @@ showSheet = function(idx) {
     if (typeof window._fbForceWrite === 'function') window._fbForceWrite('bnl_s16_v1', json);
   }
 
+  // Marcar dirty en cada tecla del usuario en sheet 15
+  let _t15Input = null;
+  document.addEventListener('input', function(e) {
+    if (!e.target.closest('#tablewrap_15')) return;
+    _s15Dirty = true;
+    clearTimeout(_t15Input);
+    _t15Input = setTimeout(saveS15, 600);
+  }, true);
+
   // Marcar dirty en cada tecla del usuario en sheet 16
   let _t16Input = null;
   document.addEventListener('input', function(e) {
@@ -8015,11 +8106,11 @@ showSheet = function(idx) {
 
   // Guardar al ocultar la pestaña / cambiar ventana
   document.addEventListener('visibilitychange', function() {
-    if (document.hidden) { saveStaticSheets(); _s16SaveNow(); }
+    if (document.hidden) { saveStaticSheets(); saveS15(); _s16SaveNow(); }
   });
 
-  // Guardar antes de cerrar o recargar — incluye sheet 16
-  window.addEventListener('beforeunload', function() { saveStaticSheets(); _s16SaveNow(); });
+  // Guardar antes de cerrar o recargar — incluye sheet 15 y 16
+  window.addEventListener('beforeunload', function() { saveStaticSheets(); saveS15(); _s16SaveNow(); });
 
   // Al cargar un archivo en hoja editable, guardar después del render
   const _origLoadFile = typeof loadFile !== 'undefined' ? loadFile : null;
@@ -8124,7 +8215,7 @@ showSheet = function(idx) {
   try { firebase.initializeApp(_fbCfg); _db = firebase.database(); }
   catch(e) { console.error('[Sync] Init falló:', e); return; }
 
-  const KEYS = ['bnl_acumulado_v1','bnl_sheets_v2','bnl_static_v1','bnl_ficha_v1','bnl_b17_v1','bnl_s16_v1','bnl_eventos_v1','bnl_cruce_notas_v1','bnl_alertas_v1'];
+  const KEYS = ['bnl_acumulado_v1','bnl_sheets_v2','bnl_static_v1','bnl_ficha_v1','bnl_b17_v1','bnl_s16_v1','bnl_s15_v1','bnl_eventos_v1','bnl_cruce_notas_v1','bnl_alertas_v1'];
   let _writing = false;
   const _timers = {};
 
@@ -8436,6 +8527,8 @@ showSheet = function(idx) {
             window._s16Restore(d.rows);
           }
         } catch(e) {}
+      } else if (key === 'bnl_s15_v1') {
+        if (typeof window.restoreS15 === 'function') window.restoreS15();
       } else if (key === 'bnl_b17_v1') {
         try {
           const d = JSON.parse(value);
@@ -8639,6 +8732,8 @@ showSheet = function(idx) {
         }
       } catch(e) {}
     }, 250);
+    // 4d. Restaurar sheet 15 (Cierre Diario) desde bnl_s15_v1
+    setTimeout(() => { if (typeof window.restoreS15 === 'function') window.restoreS15(); }, 600);
     // 5. Restaurar ficha técnica
     setTimeout(() => {
       try {
