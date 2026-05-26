@@ -8031,16 +8031,34 @@ showSheet = function(idx) {
     try {
       const raw = localStorage.getItem('bnl_sheets_v2');
       console.log('[S2] _restoreSheets_v2 llamada. localStorage bnl_sheets_v2:', raw ? 'tiene datos (' + raw.length + ' chars)' : 'VACÍO');
-      if (!raw) return;
-      const data = JSON.parse(raw);
+      const data = raw ? JSON.parse(raw) : {};
       [7, 8].forEach(function(idx) {
         const d = data[idx];
+        const wrap = document.getElementById('tablewrap_' + idx);
+        if (!wrap) return;
         if (!d || !Array.isArray(d.rows) || d.rows.length < 2) {
-          console.log('[S2] Sheet ' + idx + ': sin datos en localStorage');
+          // Sin datos en Firebase/localStorage → limpiar la hoja
+          const table = wrap.querySelector('table');
+          if (table) {
+            const tbody = table.querySelector('tbody');
+            const thead = table.querySelector('thead');
+            const colCount = thead ? thead.querySelectorAll('th').length : 8;
+            if (tbody) {
+              tbody.innerHTML = '';
+              const tr = document.createElement('tr');
+              for (let i = 0; i < colCount; i++) {
+                const td = document.createElement('td');
+                if (i === 0) { td.textContent = 'Sin datos — carga el archivo del día'; td.style.color='#94a3b8'; td.style.fontStyle='italic'; }
+                tr.appendChild(td);
+              }
+              tbody.appendChild(tr);
+            }
+          }
+          document.getElementById('tab_' + idx)?.classList.remove('uploaded');
+          if (typeof updateCount === 'function') updateCount(idx);
+          console.log('[S2] Sheet ' + idx + ': sin datos → limpiada');
           return;
         }
-        const wrap = document.getElementById('tablewrap_' + idx);
-        if (!wrap) { console.log('[S2] Sheet ' + idx + ': tablewrap no existe en DOM'); return; }
         console.log('[S2] Sheet ' + idx + ': restaurando ' + d.rows.length + ' filas...');
         const origRender = window._origRenderData;
         if (typeof origRender === 'function') origRender(idx, d.rows, 'restaurado', false);
