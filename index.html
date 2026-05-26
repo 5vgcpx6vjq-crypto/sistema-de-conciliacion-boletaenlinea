@@ -1806,7 +1806,7 @@ empresa (10%)</td></tr><tr><td style="font-size:11.0px" contenteditable="true" d
       <span class="row-badge" id="info_15"></span>
     </div>
     <div class="toolbar-right">
-      <button class="btn btn-ghost" onclick="cierreAutoCalc()" title="Recalcular totales automáticos"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Recalcular</button><button class="btn btn-ghost" onclick="resetSheet(15)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.87"/></svg> Restaurar</button><button class="btn btn-export" onclick="exportCSV(15,'Cierre Diario')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Exportar CSV</button>
+      <button class="btn btn-ghost" onclick="rellenarCierreDesdeAcumulados()" title="Rellenar fechas faltantes desde acumulados" style="background:#dbeafe;color:#1d4ed8;border-color:#93c5fd"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Rellenar fechas</button><button class="btn btn-ghost" onclick="cierreAutoCalc()" title="Recalcular totales automáticos"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Recalcular</button><button class="btn btn-ghost" onclick="resetSheet(15)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.87"/></svg> Restaurar</button><button class="btn btn-export" onclick="exportCSV(15,'Cierre Diario')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Exportar CSV</button>
     </div>
   </div><div class="edit-notice"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Hoja editable — Tab/Enter para navegar entre celdas · Las celdas modificadas se resaltan <span class="dot-mod"></span><span class="upload-status" id="status_15"></span></div>
   <div class="table-scroll" id="tablewrap_15">
@@ -4658,6 +4658,80 @@ function cierreAutoCalc() {
     if (tds[3].textContent.trim() !== fmtOrd) {
       tds[3].textContent = fmtOrd;
     }
+  }
+}
+
+// ── Rellenar fechas faltantes en Cierre Diario desde acumulados ──
+function rellenarCierreDesdeAcumulados() {
+  var wrap = document.getElementById('tablewrap_15');
+  if (!wrap) return;
+
+  // Build byDate from VD (sheets 7+22), same logic as cierreAutoCalc
+  var rawRows = [].concat(liqReadRows(7), liqReadRows(22));
+  var seen = {};
+  var byDate = {};
+  for (var ri = 0; ri < rawRows.length; ri++) {
+    var r = rawRows[ri];
+    var id = (r[0] || '').trim();
+    if (!id || id === 'Id Orden' || !/^\d{4,}$/.test(id)) continue;
+    if (seen[id]) continue;
+    seen[id] = true;
+    var fecha = '';
+    for (var c = 1; c < Math.min(r.length, 15); c++) {
+      if (/\d{4}-\d{2}-\d{2}/.test(r[c] || '')) { fecha = r[c]; break; }
+    }
+    if (!fecha) continue;
+    var dk = fecha.substring(0, 10);
+    if (!byDate[dk]) byDate[dk] = { total: 0, ordenes: 0 };
+    byDate[dk].total += liqNum(r[8] || r[3]);
+    byDate[dk].ordenes++;
+  }
+
+  // Find dates already present in sheet 15
+  var allRows = Array.from(wrap.querySelectorAll('tbody tr'));
+  var existingDates = {};
+  allRows.forEach(function(tr) {
+    var tds = tr.querySelectorAll('td');
+    if (tds.length >= 2) {
+      var m = tds[1].textContent.trim().match(/(\d{4}-\d{2}-\d{2})/);
+      if (m) existingDates[m[1]] = true;
+    }
+  });
+
+  // Dates in acumulado not yet in sheet 15, sorted
+  var datesToFill = Object.keys(byDate).filter(function(dk) {
+    return !existingDates[dk];
+  }).sort();
+
+  if (!datesToFill.length) {
+    alert('Todas las fechas del acumulado ya están en Cierre Diario.');
+    return;
+  }
+
+  // Find blank rows (no date in td[1])
+  var blankRows = allRows.filter(function(tr) {
+    var tds = tr.querySelectorAll('td');
+    if (tds.length < 2) return false;
+    return !/\d{4}-\d{2}-\d{2}/.test(tds[1].textContent.trim());
+  });
+
+  var filled = 0;
+  datesToFill.forEach(function(dk) {
+    if (filled >= blankRows.length) return;
+    var tr = blankRows[filled];
+    var tds = Array.from(tr.querySelectorAll('td'));
+    if (tds.length < 4) return;
+    tds[1].textContent = dk + ' 00:00:00';
+    tds[2].textContent = '$' + Math.round(byDate[dk].total).toLocaleString('es-CO');
+    tds[3].textContent = String(byDate[dk].ordenes);
+    filled++;
+  });
+
+  if (filled > 0) {
+    if (typeof saveS15 === 'function') saveS15();
+    alert('✓ Se rellenaron ' + filled + ' fechas en Cierre Diario.\nAhora puedes ingresar las firmas y aprobaciones de cada día.');
+  } else {
+    alert('No hay filas disponibles en Cierre Diario para llenar.');
   }
 }
 
