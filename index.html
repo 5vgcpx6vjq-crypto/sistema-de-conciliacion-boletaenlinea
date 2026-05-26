@@ -7818,8 +7818,10 @@ showSheet = function(idx) {
 
   function saveStaticSheets() {
     const data = {};
+    // Sheet 15 (Cierre Diario): tiene 5000+ celdas contenteditable — los índices planos
+    // se corrompen si el DOM cambia. Sus datos de plantilla están hardcodeados en el HTML.
     // Sheet 16 y 19 tienen sus propias claves (bnl_s16_v1 y bnl_alertas_v1)
-    _editableIdxs().filter(i => i !== 16 && i !== 19).forEach(idx => {
+    _editableIdxs().filter(i => i !== 15 && i !== 16 && i !== 19).forEach(idx => {
       const wrap = document.getElementById('tablewrap_' + idx);
       const cells = Array.from(wrap.querySelectorAll('td[contenteditable]'));
       const dirty = (window._localDirtyIdx || {})[String(idx)] || {};
@@ -7850,9 +7852,9 @@ showSheet = function(idx) {
       const raw = localStorage.getItem(_KEY);
       if (!raw) return;
       const data = JSON.parse(raw);
-      // Sheet 16 y 19 ya NO se restauran desde bnl_static_v1 — vienen de sus propias claves
+      // Sheet 15, 16 y 19 no se restauran desde bnl_static_v1
       Object.keys(data).forEach(idx => {
-        if (isNaN(+idx) || +idx === 16 || +idx === 19) return;
+        if (isNaN(+idx) || +idx === 15 || +idx === 16 || +idx === 19) return;
         const wrap = document.getElementById('tablewrap_' + idx);
         if (!wrap) return;
         const cells = Array.from(wrap.querySelectorAll('td[contenteditable]'));
