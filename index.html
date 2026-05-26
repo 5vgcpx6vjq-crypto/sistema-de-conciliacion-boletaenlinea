@@ -3261,6 +3261,22 @@ const SHEET_MAP = {
 
 // ── On page load: restore accumulated data from localStorage ────────
 window.addEventListener('DOMContentLoaded', () => {
+  // ── Limpiar índices corruptos de sheet 15 del localStorage (una sola vez) ──
+  // saveStaticSheets guardó índices incorrectos durante importBackupHtml; esto los borra
+  // antes de que restoreStaticSheets los aplique al DOM.
+  if (!localStorage.getItem('_s15_cleanup_v2')) {
+    try {
+      const _s15raw = localStorage.getItem('bnl_static_v1');
+      if (_s15raw) {
+        const _s15d = JSON.parse(_s15raw);
+        if (_s15d['15']) {
+          delete _s15d['15'];
+          localStorage.setItem('bnl_static_v1', JSON.stringify(_s15d));
+        }
+      }
+    } catch(e) {}
+    localStorage.setItem('_s15_cleanup_v2', '1');
+  }
   // Limpiar datos hardcodeados de Conciliación MP al cargar la página
   setTimeout(() => { if (typeof clearConcilMP === 'function') clearConcilMP(); }, 0);
   try {
