@@ -3788,13 +3788,18 @@ function clearDailySheet(idx) {
 
   // ── Anticipos (sheet 16): only clear APPROVED + SIGNED rows ──
   // Columns: td[10]=Quién autorizó, td[11]=Quién pagó, td[12]=Estado
+  // First 5 tbody rows are always meta/header rows — skip them so _s16Save() invariant holds
   if (idx === SHEET_MAP.src.anticipos) {
+    const S16_META = 5;
     const rows = Array.from(tbody.querySelectorAll('tr'));
     let cleared = 0, kept = 0;
 
-    rows.forEach(tr => {
+    rows.forEach((tr, rowIdx) => {
+      // Always skip meta rows (first 5) — they are description/header rows
+      if (rowIdx < S16_META) return;
+
       const cells = tr.querySelectorAll('td');
-      // Skip placeholder rows (only one non-empty cell)
+      // Remove empty placeholder data rows
       const nonEmpty = Array.from(cells).filter(c => c.textContent.trim()).length;
       if (nonEmpty <= 1) { tr.remove(); return; }
 
@@ -3815,8 +3820,8 @@ function clearDailySheet(idx) {
       }
     });
 
-    // If all cleared, add placeholder
-    if (tbody.querySelectorAll('tr').length === 0) {
+    // If all data rows cleared, add placeholder after meta rows
+    if (tbody.querySelectorAll('tr').length <= S16_META) {
       const tr = document.createElement('tr');
       for (let i = 0; i < colCount; i++) {
         const td = document.createElement('td');
