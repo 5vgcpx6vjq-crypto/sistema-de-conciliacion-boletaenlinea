@@ -3795,13 +3795,10 @@ function clearDailySheet(idx) {
     let cleared = 0, kept = 0;
 
     rows.forEach((tr, rowIdx) => {
-      // Always skip meta rows (first 5) — they are description/header rows
-      if (rowIdx < S16_META) return;
-
       const cells = tr.querySelectorAll('td');
-      // Remove empty placeholder data rows
+      // Skip truly empty rows regardless of position (don't remove — may be meta)
       const nonEmpty = Array.from(cells).filter(c => c.textContent.trim()).length;
-      if (nonEmpty <= 1) { tr.remove(); return; }
+      if (nonEmpty <= 1) return;
 
       const estado    = cells[12] ? cells[12].textContent.trim().toLowerCase() : '';
       const autorizo  = cells[10] ? cells[10].textContent.trim() : '';
@@ -3810,10 +3807,11 @@ function clearDailySheet(idx) {
       const aprobado = estado.includes('pagado') && autorizo && pago;
 
       if (aprobado) {
+        // Remove approved rows regardless of position (handles orphaned rows below meta)
         tr.remove();
         cleared++;
-      } else {
-        // Keep row, highlight it in amber to signal pending
+      } else if (rowIdx >= S16_META) {
+        // Only highlight pending amber for actual data rows (not meta/header rows)
         tr.style.background = '#fffbeb';
         tr.title = 'Pendiente: sin aprobar o sin firma — no se eliminó en el cierre';
         kept++;
