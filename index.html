@@ -3222,6 +3222,11 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closePrint()
       <div class="bk-warn">
         ⚠ Asegúrate de que los datos del día estén completos antes de continuar. La limpieza no se puede deshacer.
       </div>
+      <div style="border-top:1px solid #e2e8f0;margin:12px 0 10px;padding-top:12px">
+        <div style="font-size:11px;color:#64748b;margin-bottom:7px">¿Tienes un backup HTML descargado anteriormente? Impórtalo para acumularlo en la nube.</div>
+        <input type="file" id="bk-import-file" accept=".html" style="display:none" onchange="importBackupHtml(this.files[0])">
+        <button onclick="document.getElementById('bk-import-file').click()" style="width:100%;padding:8px 12px;background:#0ea5e9;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;justify-content:center">📂 Importar backup HTML anterior</button>
+      </div>
       <div class="bk-pwd-label">🔒 Contraseña de acumulados para autorizar:</div>
       <input type="password" id="bk-pwd" placeholder="Contraseña…" onkeydown="if(event.key==='Enter')runBackup()">
       <div class="bk-err" id="bk-err"></div>
@@ -3350,6 +3355,68 @@ function serializeTable(sheetIdx) {
 
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function serializeFromDoc(doc, sheetIdx) {
+  const wrap = doc.getElementById('tablewrap_' + sheetIdx);
+  if (!wrap) return [];
+  const table = wrap.querySelector('table');
+  if (!table) return [];
+  const rows = [];
+  table.querySelectorAll('tbody tr').forEach(tr => {
+    const firstTd = tr.querySelector('td');
+    if (!firstTd) return;
+    if (firstTd.getAttribute('colspan') === '30' || firstTd.colSpan > 5) {
+      rows.push({ isSeparator: true, text: firstTd.textContent });
+    } else {
+      const cells = [];
+      tr.querySelectorAll('td').forEach(td => {
+        cells.push({ text: td.textContent, style: td.getAttribute('style') || '' });
+      });
+      if (cells.some(c => c.text.trim())) rows.push({ cells });
+    }
+  });
+  return rows;
+}
+
+async function importBackupHtml(file) {
+  if (!file) return;
+  closeBackupModal();
+  document.getElementById('bk-import-file').value = '';
+  try {
+    const html = await file.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const bnl         = serializeFromDoc(doc, SHEET_MAP.dst.ventas);
+    const mp          = serializeFromDoc(doc, SHEET_MAP.dst.mp);
+    const bancolombia = serializeFromDoc(doc, SHEET_MAP.dst.anticipos);
+    const extracto    = serializeFromDoc(doc, SHEET_MAP.dst.extracto);
+    if (!bnl.length && !mp.length && !bancolombia.length && !extracto.length) {
+      alert('❌ No se encontraron datos acumulados en el archivo HTML. Verifica que sea un backup válido.');
+      return;
+    }
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const payload = {
+      bnl, mp, bancolombia, extracto,
+      lastBackup: `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())} (importado)`,
+      _ts: Date.now()
+    };
+    const json = JSON.stringify(payload);
+    if (bnl.length)         restoreToSheet(SHEET_MAP.dst.ventas,    bnl);
+    if (mp.length)          restoreToSheet(SHEET_MAP.dst.mp,         mp);
+    if (bancolombia.length) restoreToSheet(SHEET_MAP.dst.anticipos,  bancolombia);
+    if (extracto.length)    restoreToSheet(SHEET_MAP.dst.extracto,   extracto);
+    try { localStorage.setItem(BK_LS_KEY, json); } catch(e) {}
+    if (typeof window._fbForceWrite === 'function') {
+      window._fbForceWrite('bnl_acumulado_v1', json);
+    }
+    showToast(
+      '✅ Backup importado y sincronizado en nube',
+      `BNL: ${bnl.length} · MP: ${mp.length} · Bancolombia: ${bancolombia.length} · Extracto: ${extracto.length} filas`
+    );
+  } catch(e) {
+    alert('❌ Error al importar backup: ' + e.message);
+  }
 }
 
 // ── Modal controls ───────────────────────────────────────────────────
