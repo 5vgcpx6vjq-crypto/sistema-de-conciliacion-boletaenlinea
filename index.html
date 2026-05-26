@@ -5501,10 +5501,11 @@ function syncFichaToEmpresarios(data) {
     set(9, dirVal);
     // Mark modified
     existingRow.querySelectorAll('td').forEach(td => td.classList.add('modified'));
+    const existingEmpCode = existingRow.querySelectorAll('td')[1] ? existingRow.querySelectorAll('td')[1].textContent.trim() : '';
+    if (existingEmpCode && data.nombreEvento) _linkEmpToEvento(data.nombreEvento, existingEmpCode);
     showToast('🏢 Empresarios actualizado', `Datos de "${razon}" actualizados desde la Ficha Técnica`);
   } else {
-    // Add new row
-    // Auto-generate code: EMP-XXX
+    // Add new row with auto-generated EMP-XXX code
     let maxCode = 0;
     for (const tr of rows) {
       const cells = tr.querySelectorAll('td');
@@ -5524,8 +5525,57 @@ function syncFichaToEmpresarios(data) {
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
+    if (data.nombreEvento) _linkEmpToEvento(data.nombreEvento, newCode);
     showToast('🏢 Empresario agregado', `"${razon}" (${newCode}) añadido a la hoja Empresarios`);
   }
+}
+
+// Link an EMP code to the matching event row in Eventos (sheet 4) and persist to bnl_eventos_v1
+function _linkEmpToEvento(nombreEvento, empCode) {
+  if (!nombreEvento || !empCode) return;
+  const nombreUp = nombreEvento.toUpperCase().trim();
+
+  // Update DOM in Eventos table
+  const evPanel = document.getElementById('sheet_4');
+  if (evPanel) {
+    const evTbl = evPanel.querySelector('table');
+    if (evTbl) {
+      Array.from(evTbl.querySelectorAll('tbody tr')).forEach(tr => {
+        const cells = tr.querySelectorAll('td');
+        if (cells.length < 4) return;
+        const nom    = (cells[2]  ? cells[2].textContent.trim().toUpperCase()  : '');
+        const nomBNL = (cells[14] ? cells[14].textContent.trim().toUpperCase() : '');
+        if (nom === nombreUp || nomBNL === nombreUp) {
+          if (!cells[3].textContent.trim()) {
+            cells[3].textContent = empCode;
+            cells[3].classList.add('modified');
+          }
+        }
+      });
+    }
+  }
+
+  // Also update bnl_eventos_v1 so the link persists after reload
+  try {
+    const raw = localStorage.getItem('bnl_eventos_v1');
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (!saved || !Array.isArray(saved.rows)) return;
+    let changed = false;
+    saved.rows.forEach(ev => {
+      const evNom = ((ev.nomBNL || ev.nom || '')).toUpperCase().trim();
+      if (evNom === nombreUp && !ev.emp) {
+        ev.emp = empCode;
+        changed = true;
+      }
+    });
+    if (changed) {
+      saved._ts = Date.now();
+      const json = JSON.stringify(saved);
+      localStorage.setItem('bnl_eventos_v1', json);
+      if (typeof window._fbForceWrite === 'function') window._fbForceWrite('bnl_eventos_v1', json);
+    }
+  } catch(e) {}
 }
 
 // Hook into renderFicha
