@@ -3232,6 +3232,9 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closePrint()
       <div class="bk-err" id="bk-err"></div>
       <div class="bk-btns">
         <button class="btn-cancel" onclick="closeBackupModal()">Cancelar</button>
+        <button class="btn-cancel" style="background:#7c3aed;color:#fff;border-color:#7c3aed" onclick="closeBackupModal();sortAccumulados()">
+          🗂 Ordenar acumulados por fecha
+        </button>
         <button class="btn-unlock" style="background:#16a34a;padding:8px 18px" onclick="runBackup()">
           ✅ Ejecutar cierre del día
         </button>
@@ -3452,6 +3455,97 @@ async function importBackupHtml(file) {
   } catch(e) {
     alert('❌ Error al importar backup: ' + e.message);
   }
+}
+
+// ── Ordenar acumulados por fecha ─────────────────────────────────────
+function sortAccumulados() {
+  const sheets = [
+    { idx: SHEET_MAP.dst.ventas,      name: 'Acumulado BNL' },
+    { idx: SHEET_MAP.dst.mp,          name: 'Acumulado MP' },
+    { idx: SHEET_MAP.dst.anticipos,   name: 'Acumulado Bancolombia' },
+    { idx: SHEET_MAP.dst.extracto,    name: 'Acumulado Extracto' }
+  ];
+
+  let totalMoved = 0;
+
+  sheets.forEach(({ idx, name }) => {
+    const wrap = document.getElementById('tablewrap_' + idx);
+    if (!wrap) return;
+    const tbody = wrap.querySelector('table tbody');
+    if (!tbody) return;
+
+    const allRows = Array.from(tbody.querySelectorAll('tr'));
+    if (!allRows.length) return;
+
+    // Agrupar filas en bloques por separador de fecha
+    const blocks = [];   // [ { date: 'YYYY-MM-DD', sep: tr, rows: [tr,...] } ]
+    let current = null;
+    let initialRows = []; // filas antes del primer separador (sin fecha → descartar)
+
+    allRows.forEach(tr => {
+      const firstTd = tr.querySelector('td');
+      const isSep = firstTd && (firstTd.colSpan > 5 || firstTd.getAttribute('colspan') > 5);
+      if (isSep) {
+        current = { date: '', sep: tr, rows: [] };
+        // Extraer fecha YYYY-MM-DD del texto del separador
+        const m = firstTd.textContent.match(/(\d{4}-\d{2}-\d{2})/);
+        current.date = m ? m[1] : '0000-00-00';
+        blocks.push(current);
+      } else if (current) {
+        current.rows.push(tr);
+      } else {
+        initialRows.push(tr); // antes del primer separador → ignorar (datos del template)
+      }
+    });
+
+    if (!blocks.length) return;
+
+    // Ordenar bloques por fecha ascendente
+    blocks.sort((a, b) => a.date.localeCompare(b.date));
+
+    // Deduplicar: si hay bloques con la misma fecha, fusionarlos
+    const merged = [];
+    blocks.forEach(b => {
+      const prev = merged[merged.length - 1];
+      if (prev && prev.date === b.date) {
+        prev.rows.push(...b.rows); // fusionar filas en el bloque anterior
+      } else {
+        merged.push({ date: b.date, sep: b.sep, rows: [...b.rows] });
+      }
+    });
+
+    // Reconstruir tbody
+    tbody.innerHTML = '';
+    merged.forEach(b => {
+      tbody.appendChild(b.sep);
+      b.rows.forEach(r => tbody.appendChild(r));
+    });
+
+    updateCount(idx);
+    totalMoved += merged.length;
+  });
+
+  // Guardar resultado ordenado en localStorage y Firebase
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const payload = {
+    bnl:         serializeTable(SHEET_MAP.dst.ventas),
+    mp:          serializeTable(SHEET_MAP.dst.mp),
+    bancolombia: serializeTable(SHEET_MAP.dst.anticipos),
+    extracto:    serializeTable(SHEET_MAP.dst.extracto),
+    lastBackup:  `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())} (ordenado)`,
+    _ts: Date.now()
+  };
+  const json = JSON.stringify(payload);
+  try { localStorage.setItem(BK_LS_KEY, json); } catch(e) {}
+  if (typeof window._fbForceWrite === 'function') {
+    window._fbForceWrite('bnl_acumulado_v1', json);
+  }
+
+  showToast(
+    '✅ Acumulados ordenados por fecha',
+    `${merged ? merged.length : totalMoved} bloques de fecha organizados y sincronizados`
+  );
 }
 
 // ── Modal controls ───────────────────────────────────────────────────
