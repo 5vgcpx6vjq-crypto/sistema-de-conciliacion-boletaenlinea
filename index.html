@@ -3437,6 +3437,10 @@ async function importBackupHtml(file) {
     clearDailySheet(SHEET_MAP.src.ventas);
     clearDailySheet(SHEET_MAP.src.mp);
     clearDailySheet(SHEET_MAP.src.anticipos);
+    // Persist cleared anticipos to Firebase so they don't restore on reload
+    if (typeof window._s16Save === 'function' && typeof window._s16Sync === 'function') {
+      window._s16Sync(window._s16Save() || []);
+    }
     try {
       const s2empty = JSON.stringify({ _ts: Date.now() });
       localStorage.setItem('bnl_sheets_v2', s2empty);
@@ -3659,6 +3663,10 @@ async function runBackup() {
     if (typeof window._fbForceWrite === 'function') window._fbForceWrite('bnl_sheets_v2', s2json);
   } catch(e) {}
   const r4 = clearDailySheet(SHEET_MAP.src.anticipos) || { cleared: 0, kept: 0 };
+  // Persist cleared anticipos to Firebase so they don't restore on reload
+  if (typeof window._s16Save === 'function' && typeof window._s16Sync === 'function') {
+    window._s16Sync(window._s16Save() || []);
+  }
   // Limpiar extracto B17 de memoria
   if (r4ext.count > 0) {
     B17.rows = [];
