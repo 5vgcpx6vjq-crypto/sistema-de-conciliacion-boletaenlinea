@@ -3512,15 +3512,29 @@ function sortAccumulados() {
     blocks.forEach(b => {
       const prev = merged[merged.length - 1];
       if (prev && prev.date === b.date) {
-        prev.rows.push(...b.rows); // fusionar filas en el bloque anterior
+        prev.rows.push(...b.rows);
       } else {
         merged.push({ date: b.date, sep: b.sep, rows: [...b.rows] });
       }
     });
 
-    // Reconstruir tbody
+    // Deduplicar filas con contenido idéntico entre bloques (fingerprint de primeras 10 celdas)
+    const seenFp = new Set();
+    merged.forEach(b => {
+      b.rows = b.rows.filter(tr => {
+        const fp = Array.from(tr.querySelectorAll('td')).slice(0, 10)
+          .map(td => td.textContent.trim()).join('§');
+        if (!fp.replace(/§/g, '').trim()) return false; // fila vacía
+        if (seenFp.has(fp)) return false; // duplicado exacto
+        seenFp.add(fp);
+        return true;
+      });
+    });
+
+    // Reconstruir tbody (omitir bloques que quedaron vacíos tras dedup)
     tbody.innerHTML = '';
     merged.forEach(b => {
+      if (!b.rows.length) return; // bloque vacío — todo era duplicado
       tbody.appendChild(b.sep);
       b.rows.forEach(r => tbody.appendChild(r));
     });
@@ -3727,15 +3741,32 @@ function accumulateRows(srcIdx, dstIdx, label) {
   sep.innerHTML = `<td colspan="${cols}" style="background:#1a3a6b;color:#fff;font-weight:bold;font-size:10px;padding:4px 10px;text-align:center">📅 ${label2} — ${label} (${srcRows.length} registros)</td>`;
   dstTbody.appendChild(sep);
 
+  // Build fingerprints of rows already in destination to prevent exact duplicates
+  const existingFps = new Set();
+  Array.from(dstTbody.querySelectorAll('tr')).forEach(tr => {
+    const fp = Array.from(tr.querySelectorAll('td')).slice(0, 10)
+      .map(td => td.textContent.trim()).join('§');
+    if (fp.replace(/§/g, '').trim()) existingFps.add(fp);
+  });
+
+  let added = 0;
   srcRows.forEach(r => {
+    const fp = Array.from(r.querySelectorAll('td')).slice(0, 10)
+      .map(td => td.textContent.trim()).join('§');
+    if (existingFps.has(fp)) return; // exact duplicate — skip
     const clone = r.cloneNode(true);
     clone.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'));
     dstTbody.appendChild(clone);
+    existingFps.add(fp);
+    added++;
   });
+
+  // Remove separator if nothing new was added
+  if (added === 0) { sep.parentNode && sep.parentNode.removeChild(sep); }
 
   document.getElementById('tab_' + dstIdx)?.classList.add('uploaded');
   updateCount(dstIdx);
-  return { msg: `${label}: ${srcRows.length} filas acumuladas ✓`, count: srcRows.length };
+  return { msg: `${label}: ${added} filas acumuladas ✓`, count: added };
 }
 
 // ── Accumulate B17 extract rows → destination sheet ─────────────────────────
