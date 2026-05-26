@@ -8538,7 +8538,44 @@ showSheet = function(idx) {
         td.style.cssText = style;
         if      (j === 1)  td.textContent = evt.cod     || '';
         else if (j === 2)  td.textContent = evt.nom     || '';
-        else if (j === 3)  td.textContent = evt.emp     || '';
+        else if (j === 3) {
+          td.textContent = evt.emp || '';
+          // Editable only for extra events (not _BASE_EVENTOS which have fixed codes)
+          if (!evt._isBase) {
+            td.contentEditable = 'true';
+            td.title = 'Click para asignar código de empresario (ej: EMP-002)';
+            td.style.cssText += ';cursor:pointer;background:#fef9c3;border-bottom:1px dashed #ca8a04';
+            td.addEventListener('blur', function() {
+              var newEmp = td.textContent.trim().toUpperCase();
+              evt.emp = newEmp;
+              // Persist to bnl_eventos_v1
+              try {
+                var raw = localStorage.getItem('bnl_eventos_v1');
+                if (!raw) return;
+                var saved = JSON.parse(raw);
+                if (!saved || !Array.isArray(saved.rows)) return;
+                var changed = false;
+                saved.rows.forEach(function(ev) {
+                  var evCod = (ev.cod || '').trim();
+                  var evNom = (ev.nomBNL || ev.nom || '').trim().toUpperCase();
+                  var thisCod = (evt.cod || '').trim();
+                  var thisNom = (evt.nomBNL || evt.nom || '').trim().toUpperCase();
+                  if ((thisCod && evCod === thisCod) || (thisNom && evNom === thisNom)) {
+                    ev.emp = newEmp; changed = true;
+                  }
+                });
+                if (changed) {
+                  saved._ts = Date.now();
+                  var json = JSON.stringify(saved);
+                  localStorage.setItem('bnl_eventos_v1', json);
+                  if (typeof window._fbForceWrite === 'function') window._fbForceWrite('bnl_eventos_v1', json);
+                  td.style.background = '#dcfce7';
+                  setTimeout(function() { td.style.background = '#fef9c3'; }, 1200);
+                }
+              } catch(e) {}
+            });
+          }
+        }
         else if (j === 4)  td.textContent = evt.fecha   || '';
         else if (j === 5)  td.textContent = evt.ciudad  || '';
         else if (j === 6)  td.textContent = evt.aforo   || '';
@@ -8557,7 +8594,10 @@ showSheet = function(idx) {
 
     // Renderizar: primero los 23 base, luego los extras de Firebase
     // Todos van ANTES de la ancla fija → orden: base... extras... [anchor]
-    var allEvts = (typeof _BASE_EVENTOS !== 'undefined' ? _BASE_EVENTOS : []).concat(data.rows || []);
+    var baseEvts = (typeof _BASE_EVENTOS !== 'undefined' ? _BASE_EVENTOS : []).map(function(e) {
+      return Object.assign({}, e, { _isBase: true });
+    });
+    var allEvts = baseEvts.concat(data.rows || []);
     allEvts.forEach(function(evt) {
       tbody.insertBefore(buildRow(evt), anchor);
     });
@@ -8883,6 +8923,26 @@ showSheet = function(idx) {
       try {
         const evRaw = localStorage.getItem('bnl_eventos_v1');
         const data = evRaw ? JSON.parse(evRaw) : { rows: [] };
+        // Migration: apply known EMP codes for events that were auto-detected without one
+        const knownEmpMap = {
+          'LOS DE LA CULPA EN CALI': 'EMP-002'
+        };
+        let migrationChanged = false;
+        if (data && Array.isArray(data.rows)) {
+          data.rows.forEach(function(ev) {
+            const evNom = (ev.nomBNL || ev.nom || '').trim().toUpperCase();
+            if (!ev.emp && knownEmpMap[evNom]) {
+              ev.emp = knownEmpMap[evNom];
+              migrationChanged = true;
+            }
+          });
+          if (migrationChanged) {
+            data._ts = Date.now();
+            const json = JSON.stringify(data);
+            localStorage.setItem('bnl_eventos_v1', json);
+            if (typeof window._fbForceWrite === 'function') window._fbForceWrite('bnl_eventos_v1', json);
+          }
+        }
         _restoreEventosExtra(data);
       } catch(e) { try { _restoreEventosExtra({ rows: [] }); } catch(e2) {} }
     }, 350);
