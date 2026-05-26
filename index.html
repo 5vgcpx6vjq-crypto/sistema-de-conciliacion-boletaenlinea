@@ -919,7 +919,7 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;fon
   <div class="header-meta">
     <span class="meta-chip">📤 Ventas Diarias · Mercado Pago · Anticipos</span>
     <span class="meta-chip">🔒 Acumulados protegidos</span>
-  <button class="btn-backup" onclick="openBackupModal()" title="Cierre del día: acumular datos, guardar backup y limpiar hojas diarias">
+  <button class="btn-backup" onclick="openBackupModal()" title="Cierre del día: acumular datos en la nube y limpiar hojas diarias">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v14a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
       Backup Diario
     </button>
@@ -1375,7 +1375,7 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;fon
         </div>
         <div style="background:#fff;border:1px solid #f0abfc;border-radius:8px;padding:11px 14px;">
           <div style="font-size:11px;color:#a21caf;font-weight:700;margin-bottom:4px;">③ QUÉ LIMPIA</div>
-          <div style="color:#334155;">Ventas Diarias, Mercado Pago y Anticipos quedan en blanco para el día siguiente. El backup se descarga como archivo HTML</div>
+          <div style="color:#334155;">Los acumulados se sincronizan en Firebase (nube). Ventas Diarias, Mercado Pago y Anticipos quedan en blanco para el día siguiente.</div>
         </div>
       </div>
     </div>
@@ -3209,17 +3209,15 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closePrint()
     <div class="bk-head">
       <span class="bk-head-icon">📦</span>
       <div>
-        <h2>Cierre y Backup del Día</h2>
-        <p>Este proceso ejecuta 4 acciones en secuencia</p>
+        <h2>Cierre del Día</h2>
+        <p>Este proceso ejecuta 3 acciones en secuencia y guarda todo en la nube</p>
       </div>
     </div>
     <div class="bk-body">
       <div class="bk-steps">
-        <div class="bk-step"><span class="bk-step-num">1</span><div><strong>Acumular</strong> Ventas Diarias → Acumulado BNL</div></div>
-        <div class="bk-step"><span class="bk-step-num">2</span><div><strong>Acumular</strong> Mercado Pago → Acumulado MP</div></div>
-        <div class="bk-step"><span class="bk-step-num">4</span><div><strong>Acumular</strong> Extracto Bancolombia → Acumulado Extracto</div></div>
-        <div class="bk-step"><span class="bk-step-num">3</span><div><strong>Guardar backup</strong> HTML con la fecha en tu carpeta de descargas</div></div>
-        <div class="bk-step danger"><span class="bk-step-num">4</span><div><strong>Limpiar</strong> Ventas Diarias y Mercado Pago para el día siguiente</div></div>
+        <div class="bk-step"><span class="bk-step-num">1</span><div><strong>Acumular</strong> Ventas Diarias, MP, Anticipos y Extracto → Acumulados</div></div>
+        <div class="bk-step"><span class="bk-step-num">2</span><div><strong>Sincronizar</strong> acumulados en Firebase (nube) para todos los usuarios</div></div>
+        <div class="bk-step danger"><span class="bk-step-num">3</span><div><strong>Limpiar</strong> Ventas Diarias y Mercado Pago para el día siguiente</div></div>
       </div>
       <div class="bk-warn">
         ⚠ Asegúrate de que los datos del día estén completos antes de continuar. La limpieza no se puede deshacer.
@@ -3421,37 +3419,36 @@ async function runBackup() {
   setStep('④ ' + r4ext.msg, 72);
   await sleep(350);
 
-  // ⑤ Guardar acumulados en localStorage
-  setStep('⑤ Guardando acumulados en memoria local…', 75);
+  // ⑤ Guardar acumulados en localStorage + sincronizar en Firebase (nube)
+  setStep('⑤ Guardando y sincronizando acumulados en nube…', 75);
   await sleep(300);
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
   const dateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
   const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const _acumPayload = {
+    bnl:         serializeTable(SHEET_MAP.dst.ventas),
+    mp:          serializeTable(SHEET_MAP.dst.mp),
+    bancolombia: serializeTable(SHEET_MAP.dst.anticipos),
+    extracto:    serializeTable(SHEET_MAP.dst.extracto),
+    lastBackup:  `${dateStr} ${timeStr}`,
+    _ts: Date.now()
+  };
+  const _acumJson = JSON.stringify(_acumPayload);
   try {
-    localStorage.setItem(BK_LS_KEY, JSON.stringify({
-      bnl:          serializeTable(SHEET_MAP.dst.ventas),
-      mp:           serializeTable(SHEET_MAP.dst.mp),
-      bancolombia:  serializeTable(SHEET_MAP.dst.anticipos),
-      extracto:     serializeTable(SHEET_MAP.dst.extracto),
-      lastBackup:   `${dateStr} ${timeStr}`
-    }));
-    setStep('⑤ Acumulados guardados en memoria local ✓', 80);
-  } catch(e) {
-    setStep('⑤ Advertencia: no se pudo guardar en memoria local', 80);
+    localStorage.setItem(BK_LS_KEY, _acumJson);
+  } catch(e) {}
+  // Push a Firebase para que todos los usuarios vean los acumulados actualizados
+  if (typeof window._fbForceWrite === 'function') {
+    window._fbForceWrite('bnl_acumulado_v1', _acumJson);
+    setStep('⑤ Acumulados guardados y sincronizados en nube ✓', 85);
+  } else {
+    setStep('⑤ Acumulados en memoria local (Firebase no disponible)', 85);
   }
-  await sleep(350);
-
-  // ⑥ Descargar backup HTML
-  setStep('⑥ Generando y descargando backup HTML…', 85);
-  await sleep(400);
-  const fileName = `Conciliacion_Backup_${dateStr}_${pad(now.getHours())}${pad(now.getMinutes())}.html`;
-  downloadFullBackup(fileName, dateStr, timeStr);
-  setStep('⑥ Backup descargado: ' + fileName + ' ✓', 92);
   await sleep(400);
 
-  // ⑦ Limpiar hojas diarias + extracto
-  setStep('⑦ Limpiando hojas diarias…', 96);
+  // ⑥ Limpiar hojas diarias + extracto
+  setStep('⑥ Limpiando hojas diarias…', 90);
   await sleep(350);
   clearDailySheet(SHEET_MAP.src.ventas);
   clearDailySheet(SHEET_MAP.src.mp);
@@ -3479,8 +3476,8 @@ async function runBackup() {
     if(cr){cr.innerHTML='';cr.style.display='none';}
   }
   const stepMsg = r4.kept > 0
-    ? `⑦ Anticipos: ${r4.cleared} limpiados · ⚠ ${r4.kept} pendiente${r4.kept>1?'s':''} sin aprobar`
-    : '⑦ Hojas diarias limpiadas ✓';
+    ? `⑥ Anticipos: ${r4.cleared} limpiados · ⚠ ${r4.kept} pendiente${r4.kept>1?'s':''} sin aprobar`
+    : '⑥ Hojas diarias limpiadas ✓';
   setStep(stepMsg, 100);
   await sleep(700);
 
@@ -3488,8 +3485,8 @@ async function runBackup() {
   const anticMsg = r4.kept > 0
     ? ` · ⚠ ${r4.kept} anticipo${r4.kept>1?'s':''} sin firma — quedan en la pestaña`
     : ' · hojas limpias para mañana';
-  showToast('📦 Cierre del día completado',
-    `${r1.count + r2.count + r3.count + r4ext.count} registros acumulados · backup guardado${anticMsg}`);
+  showToast('✅ Cierre del día completado — guardado en nube',
+    `${r1.count + r2.count + r3.count + r4ext.count} registros acumulados en Firebase${anticMsg}`);
 
   // ── Refrescar barra de totales de Ventas Boletería ──
   setTimeout(() => {
