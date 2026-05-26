@@ -3402,14 +3402,27 @@ async function importBackupHtml(file) {
       _ts: Date.now()
     };
     const json = JSON.stringify(payload);
+    // Restaurar acumulados en DOM
     if (bnl.length)         restoreToSheet(SHEET_MAP.dst.ventas,    bnl);
     if (mp.length)          restoreToSheet(SHEET_MAP.dst.mp,         mp);
     if (bancolombia.length) restoreToSheet(SHEET_MAP.dst.anticipos,  bancolombia);
     if (extracto.length)    restoreToSheet(SHEET_MAP.dst.extracto,   extracto);
+    // Guardar acumulados en localStorage + Firebase
     try { localStorage.setItem(BK_LS_KEY, json); } catch(e) {}
     if (typeof window._fbForceWrite === 'function') {
       window._fbForceWrite('bnl_acumulado_v1', json);
     }
+    // Limpiar hojas diarias en DOM y en Firebase para que queden en blanco
+    clearDailySheet(SHEET_MAP.src.ventas);
+    clearDailySheet(SHEET_MAP.src.mp);
+    clearDailySheet(SHEET_MAP.src.anticipos);
+    try {
+      const s2empty = JSON.stringify({ _ts: Date.now() });
+      localStorage.setItem('bnl_sheets_v2', s2empty);
+      if (typeof window._fbForceWrite === 'function') {
+        window._fbForceWrite('bnl_sheets_v2', s2empty);
+      }
+    } catch(e) {}
     showToast(
       '✅ Backup importado y sincronizado en nube',
       `BNL: ${bnl.length} · MP: ${mp.length} · Bancolombia: ${bancolombia.length} · Extracto: ${extracto.length} filas`
