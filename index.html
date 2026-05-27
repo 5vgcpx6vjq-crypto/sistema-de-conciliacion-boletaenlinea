@@ -996,34 +996,34 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;fon
 <div class="kpi-grid">
   <div class="kpi-card blue">
     <div class="kpi-label">VENTA BRUTA TOTAL</div>
-    <div class="kpi-value">$360.009.874</div>
+    <div class="kpi-value" id="kpi-venta-bruta">$360.009.874</div>
   </div>
   <div class="kpi-card green">
     <div class="kpi-label">ANTICIPOS PAGADOS</div>
-    <div class="kpi-value">$10.643.266</div>
+    <div class="kpi-value" id="kpi-anticipos">$10.643.266</div>
   </div>
   <div class="kpi-card teal">
     <div class="kpi-label">EVENTOS ACTIVOS</div>
-    <div class="kpi-value">23</div>
+    <div class="kpi-value" id="kpi-activos">23</div>
   </div>
   <div class="kpi-card purple">
     <div class="kpi-label">EVENTOS LIQUIDADOS</div>
-    <div class="kpi-value">0</div>
+    <div class="kpi-value" id="kpi-liquidados">0</div>
   </div>
   <div class="kpi-card orange">
     <div class="kpi-label">VENTA BOLETERÍA (CSV)</div>
-    <div class="kpi-value">$360.009.874</div>
+    <div class="kpi-value" id="kpi-csv">$360.009.874</div>
   </div>
   <div class="kpi-card red">
     <div class="kpi-label">DESCUENTOS APLICADOS</div>
-    <div class="kpi-value">$0</div>
+    <div class="kpi-value" id="kpi-descuentos">$0</div>
   </div>
   <div class="kpi-card indigo">
     <div class="kpi-label">VENTAS VÍA PROMOTOR</div>
-    <div class="kpi-value">$13.890.000</div>
+    <div class="kpi-value" id="kpi-promotor">$13.890.000</div>
   </div>
 </div>
-<div class="estado-bar estado-warn">⚠ HAY 37 PROBLEMA(S) PENDIENTE(S) - Revisa la sección de alertas arriba</div>
+<div class="estado-bar estado-warn" id="dash-estado-bar">⚠ HAY 37 PROBLEMA(S) PENDIENTE(S) - Revisa la sección de alertas arriba</div>
 <div class="two-col">
   <div class="section">
   <div class="section-title">🚨 ALERTAS DE DESCUADRE</div>
@@ -1031,23 +1031,23 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;fon
     <thead><tr><th>Alerta</th><th>Cantidad</th><th>Acción recomendada</th></tr></thead>
     <tbody><tr class="alert-row-warn">
           <td class="alert-label">Anticipos con datos incompletos</td>
-          <td class="alert-qty"><span class="qty-badge qty-warn">37</span></td>
+          <td class="alert-qty"><span class="qty-badge qty-warn" id="dash-alerta-incompletos">37</span></td>
           <td class="alert-accion">Cada anticipo debe tener todos los campos antes de salir el dinero</td>
         </tr><tr class="">
           <td class="alert-label">Anticipos sin comprobante de Bancolombia</td>
-          <td class="alert-qty"><span class="qty-badge qty-ok">0</span></td>
+          <td class="alert-qty"><span class="qty-badge qty-ok" id="dash-alerta-sin-comprobante">0</span></td>
           <td class="alert-accion">Pega el # de transacción cuando hagas el pago</td>
         </tr><tr class="">
           <td class="alert-label">⏳ Anticipos pendientes de extracto del mes</td>
-          <td class="alert-qty"><span class="qty-badge qty-ok">0</span></td>
+          <td class="alert-qty"><span class="qty-badge qty-ok" id="dash-alerta-pendiente-extracto">0</span></td>
           <td class="alert-accion">Normal: el extracto de ese mes aún no está cargado. NO es un error.</td>
         </tr><tr class="">
           <td class="alert-label">🚨 Anticipos NO encontrados en extracto YA cargado</td>
-          <td class="alert-qty"><span class="qty-badge qty-ok">0</span></td>
+          <td class="alert-qty"><span class="qty-badge qty-ok" id="dash-alerta-no-extracto">0</span></td>
           <td class="alert-accion">PROBLEMA REAL: el comprobante no aparece. Revisa si está mal escrito o el pago nunca salió.</td>
         </tr><tr class="">
           <td class="alert-label">🚨 Movimientos del banco NO registrados como anticipo</td>
-          <td class="alert-qty"><span class="qty-badge qty-ok">0</span></td>
+          <td class="alert-qty"><span class="qty-badge qty-ok" id="dash-alerta-mov-banco">0</span></td>
           <td class="alert-accion">ESTOS SON LOS PAGOS QUE EL CONTADOR OLVIDÓ APUNTAR - ¡investígalos!</td>
         </tr></tbody>
   </table>
@@ -1058,37 +1058,37 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;fon
     <thead><tr><th>Alerta</th><th>Cantidad</th><th>Acción recomendada</th></tr></thead>
     <tbody><tr class="alert-row-warn">
           <td class="alert-label">Órdenes BNL sin transacción Mercado Pago</td>
-          <td class="alert-qty"><span class="qty-badge qty-warn">935</span></td>
+          <td class="alert-qty"><span class="qty-badge qty-warn" id="dash-ctrl-bnl-sin-mp">935</span></td>
           <td class="alert-accion">Pueden ser pagos en Bancolombia/efectivo/promotor (normal) o ventas no cobradas (problema).</td>
         </tr><tr class="">
           <td class="alert-label">🚨 Descuadres entre MP y BNL (&gt;$100)</td>
-          <td class="alert-qty"><span class="qty-badge qty-ok">0</span></td>
+          <td class="alert-qty"><span class="qty-badge qty-ok" id="dash-ctrl-descuadres">0</span></td>
           <td class="alert-accion">El cobro MP no coincide con el total Boletaenlinea de la misma orden. Investigar cada caso.</td>
         </tr><tr class="">
           <td class="alert-label">Transacciones MP sin orden en BNL</td>
-          <td class="alert-qty"><span class="qty-badge qty-ok">0</span></td>
+          <td class="alert-qty"><span class="qty-badge qty-ok" id="dash-ctrl-mp-sin-bnl">0</span></td>
           <td class="alert-accion">Cobros que entraron a MP pero no aparecen como orden en BNL. Posible cobro manual o error.</td>
         </tr><tr class="alert-row-warn">
           <td class="alert-label"># Casos detectados (Promotor o Efectivo con cobro web)</td>
-          <td class="alert-qty"><span class="qty-badge qty-warn">31</span></td>
+          <td class="alert-qty"><span class="qty-badge qty-warn" id="dash-ctrl-casos">31</span></td>
           <td class="alert-accion">Revisar hoja &#x27;Alertas Cobros&#x27; para verificar cada caso</td>
         </tr><tr class="alert-row-warn">
           <td class="alert-label">$ Monto bajo revisión (cobros a aclarar)</td>
-          <td class="alert-qty"><span class="qty-badge qty-warn">93,000</span></td>
+          <td class="alert-qty"><span class="qty-badge qty-warn" id="dash-ctrl-monto">93,000</span></td>
           <td class="alert-accion">Dinero involucrado mientras los casos no se cierren</td>
         </tr></tbody>
   </table>
 </div>
 </div>
 <div class="section">
-  <div class="section-title">📋 RESUMEN POR EVENTO (0 eventos)</div>
+  <div class="section-title" id="dash-resumen-title">📋 RESUMEN POR EVENTO (0 eventos)</div>
   <div style="overflow:auto">
   <table class="data-table">
     <thead><tr>
       <th>Código</th><th>Evento</th><th>Empresario</th>
       <th>Estado</th><th>Venta bruta</th><th>Anticipos pagados</th><th>% Anticipado</th>
     </tr></thead>
-    <tbody></tbody>
+    <tbody id="dash-resumen-tbody"></tbody>
   </table>
   </div>
 </div>
@@ -1097,76 +1097,8 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;fon
   <div style="overflow:auto">
   <table class="data-table">
     <thead><tr><th>#</th><th>Evento</th><th>Empresario</th><th>Boletas</th><th>Venta $</th><th>% del total</th></tr></thead>
-    <tbody><tr>
-      <td class="rank">#1</td>
-      <td class="evt-name">COSCULLUELA EN TULUÁ</td>
-      <td class="small-txt">comercial929producciones@gmail.com</td>
-      <td class="num">274</td>
-      <td class="num">$39.559.000</td>
-      <td><div class="top-bar"><div class="top-fill" style="width:100%"></div><span>17.2%</span></div></td>
-    </tr><tr>
-      <td class="rank">#2</td>
-      <td class="evt-name">UNA NOCHE PARA RECORDAR - CALI</td>
-      <td class="small-txt">comercial929producciones@gmail.com</td>
-      <td class="num">311</td>
-      <td class="num">$28.060.000</td>
-      <td><div class="top-bar"><div class="top-fill" style="width:70%"></div><span>12.2%</span></div></td>
-    </tr><tr>
-      <td class="rank">#3</td>
-      <td class="evt-name">EMPAREJADOS 2026 CON JOSE ORDOÑEZ EN BOGOTÁ-3</td>
-      <td class="small-txt">comercial929producciones@gmail.com</td>
-      <td class="num">195</td>
-      <td class="num">$20.096.000</td>
-      <td><div class="top-bar"><div class="top-fill" style="width:50%"></div><span>8.7%</span></div></td>
-    </tr><tr>
-      <td class="rank">#4</td>
-      <td class="evt-name">REY DE HUMOR - NEIVA</td>
-      <td class="small-txt">comercial929producciones@gmail.com</td>
-      <td class="num">166</td>
-      <td class="num">$15.119.000</td>
-      <td><div class="top-bar"><div class="top-fill" style="width:38%"></div><span>6.6%</span></div></td>
-    </tr><tr>
-      <td class="rank">#5</td>
-      <td class="evt-name">LOS REYES DEL HUMOR - VILLAVICENCIO</td>
-      <td class="small-txt">comercial929producciones@gmail.com</td>
-      <td class="num">123</td>
-      <td class="num">$14.504.000</td>
-      <td><div class="top-bar"><div class="top-fill" style="width:36%"></div><span>6.3%</span></div></td>
-    </tr><tr>
-      <td class="rank">#6</td>
-      <td class="evt-name">EL PUMA GRACIAS TOUR 2026 EN BOGOTA</td>
-      <td class="small-txt">comercial929producciones@gmail.com</td>
-      <td class="num">57</td>
-      <td class="num">$13.975.600</td>
-      <td><div class="top-bar"><div class="top-fill" style="width:35%"></div><span>6.1%</span></div></td>
-    </tr><tr>
-      <td class="rank">#7</td>
-      <td class="evt-name">LOS REYES DEL HUMOR - CALI</td>
-      <td class="small-txt">comercial929producciones@gmail.com</td>
-      <td class="num">120</td>
-      <td class="num">$12.717.000</td>
-      <td><div class="top-bar"><div class="top-fill" style="width:32%"></div><span>5.5%</span></div></td>
-    </tr><tr>
-      <td class="rank">#8</td>
-      <td class="evt-name">SERENATA A LAS MADRES - CALI</td>
-      <td class="small-txt">grupoariaymemoria@gmail.com</td>
-      <td class="num">165</td>
-      <td class="num">$12.617.000</td>
-      <td><div class="top-bar"><div class="top-fill" style="width:31%"></div><span>5.5%</span></div></td>
-    </tr><tr>
-      <td class="rank">#9</td>
-      <td class="evt-name">EMPAREJADOS 2026 CON JOSE ORDOÑEZ EN CUCUTA</td>
-      <td class="small-txt">comercial929producciones@gmail.com</td>
-      <td class="num">95</td>
-      <td class="num">$9.486.000</td>
-      <td><div class="top-bar"><div class="top-fill" style="width:23%"></div><span>4.1%</span></div></td>
-    </tr><tr>
-      <td class="rank">#10</td>
-      <td class="evt-name">EMPAREJADOS 2026 CON JOSE ORDOÑEZ EN BUCARAMANGA-2</td>
-      <td class="small-txt">comercial929producciones@gmail.com</td>
-      <td class="num">95</td>
-      <td class="num">$7.990.000</td>
-      <td><div class="top-bar"><div class="top-fill" style="width:20%"></div><span>3.5%</span></div></td>
+    <tbody id="dash-top10-tbody"><tr>
+      <td colspan="6" style="text-align:center;color:#94a3b8;padding:16px">Cargando datos...</td>
     </tr></tbody>
   </table>
   </div>
@@ -9178,6 +9110,258 @@ showSheet = function(idx) {
 
   console.log('[Sync] Firebase listo ✅ — sistema-de-conciliacion');
 })();
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+//  refreshDashboard() — Dashboard dinámico calculado en tiempo real
+// ══════════════════════════════════════════════════════════════════
+function refreshDashboard() {
+  // ── 1. Read all data sources ──
+  const rawVD = [].concat(liqReadRows(7), liqReadRows(22)); // VD + Acumulado BNL
+  const rawAnt = [].concat(liqReadRows(16), liqReadRows(24)); // Anticipos + Acum Bancolombia
+  const rawMP  = [].concat(liqReadRows(8),  liqReadRows(23)); // MP + Acumulado MP
+  const rawExt = liqReadRows(26); // Acumulado Extracto (for bank alerts)
+  const eventos = liqGetEventos();
+
+  // ── 2. Empresarios lookup: EMP-XXX → razón social ──
+  const empMap = {};
+  liqReadRows(3).forEach(function(r) {
+    const cod = (r[1] || '').trim();
+    const nom = (r[2] || '').trim();
+    if (cod && nom) empMap[cod.toUpperCase()] = nom;
+  });
+
+  // ── 3. Process VD + Acumulado BNL — dedup by Id Orden ──
+  const seenOrders = {};
+  let totalBruta = 0, totalDescuentos = 0, totalPromotor = 0;
+  const byEvtNom = {}; // nomBNL.toUpperCase() → {valor, boletas, ordenes}
+
+  rawVD.forEach(function(r) {
+    const id = (r[0] || '').trim();
+    if (!id || id === 'Id Orden' || !/^\d{4,}$/.test(id)) return;
+    if (seenOrders[id]) return;
+    seenOrders[id] = true;
+
+    const valor   = liqNum(r[3]  || '0');
+    const desc    = liqNum(r[16] || '0');
+    const boletas = liqNum(r[2]  || '1');
+    const metodo  = ((r[7] || '') + ' ' + (r[6] || '')).toLowerCase();
+    const evNom   = (r[11] || '').trim().toUpperCase();
+
+    totalBruta      += valor;
+    totalDescuentos += desc;
+    if (metodo.includes('promotor')) totalPromotor += liqNum(r[8] || r[3] || '0');
+
+    if (evNom) {
+      if (!byEvtNom[evNom]) byEvtNom[evNom] = { valor: 0, boletas: 0, ordenes: 0 };
+      byEvtNom[evNom].valor   += valor;
+      byEvtNom[evNom].boletas += boletas;
+      byEvtNom[evNom].ordenes++;
+    }
+  });
+
+  // ── 4. Process Anticipos ──
+  let totalAnticipos = 0, antIncompletos = 0, antSinComp = 0;
+  const byEvtCodAnt = {}; // EVT-XXX.toUpperCase() → total anticipos pagados
+
+  rawAnt.forEach(function(r) {
+    const cod    = (r[3] || '').trim();
+    if (!cod || !/^EVT-/i.test(cod)) return; // skip header/empty rows
+    const monto  = liqNum(r[6] || r[5] || '0');
+    const comp   = (r[9]  || '').trim();
+    const estado = (r[12] || '').trim().toLowerCase();
+    const fecha  = (r[2]  || '').trim();
+
+    // Incomplete: missing date, amount, or comprobante
+    if (!fecha || !monto || !comp) antIncompletos++;
+    if (!comp) antSinComp++;
+
+    // Sum all anticipos with monto (regardless of estado — acumulado = all cleared/paid)
+    if (monto > 0) {
+      totalAnticipos += monto;
+      const codUp = cod.toUpperCase();
+      if (!byEvtCodAnt[codUp]) byEvtCodAnt[codUp] = 0;
+      byEvtCodAnt[codUp] += monto;
+    }
+  });
+
+  // ── 5. Events counts ──
+  let eventosActivos = 0, eventosLiquidados = 0;
+  eventos.forEach(function(e) {
+    const est = (e.estado || '').toLowerCase();
+    if (est.includes('finaliz') || est.includes('liquid') || est.includes('cerrad')) eventosLiquidados++;
+    else eventosActivos++;
+  });
+
+  // ── 6. MP / BNL cross check ──
+  const bnlIdSet = new Set();
+  Object.keys(seenOrders).forEach(function(id) { bnlIdSet.add(id); });
+
+  let mpSinBnl = 0, bnlSinMp = 0;
+  const matchedBnl = new Set();
+  rawMP.forEach(function(r) {
+    if (!/^\d{8,}$/.test(String(r[0] || '').trim())) return;
+    const est = (r[2] || '').toLowerCase();
+    if (est && !est.includes('aprobad') && !est.includes('approved')) return;
+    let found = false;
+    r.forEach(function(cell) {
+      const v = String(cell || '').trim();
+      const m = v.match(/BNL[-\s]?(\d{4,})/i);
+      if (m && bnlIdSet.has(m[1])) { matchedBnl.add(m[1]); found = true; }
+      if (!found && /^\d{4,9}$/.test(v) && bnlIdSet.has(v)) { matchedBnl.add(v); found = true; }
+    });
+    if (!found) mpSinBnl++;
+  });
+  bnlSinMp = bnlIdSet.size - matchedBnl.size;
+
+  // ── 7. Extracto / bank alerts ──
+  const extractoLoaded = rawExt.some(function(r) {
+    return r.some(function(c) { return /^\d{4,}$/.test(String(c || '').trim()); });
+  });
+  const antPendienteExtracto = extractoLoaded ? 0 : antSinComp;
+  const antNoEncontrado      = 0; // complex cross-match, keep 0 for now
+  const movBancoNoRegistrado = 0; // complex cross-match, keep 0 for now
+
+  // ── 8. Total problems ──
+  const totalProblemas = antIncompletos + antSinComp + bnlSinMp + mpSinBnl;
+
+  // ── 9. Update KPI values ──
+  function setEl(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
+
+  setEl('kpi-venta-bruta', liqFmt(totalBruta));
+  setEl('kpi-anticipos',   liqFmt(totalAnticipos));
+  setEl('kpi-activos',     String(eventosActivos));
+  setEl('kpi-liquidados',  String(eventosLiquidados));
+  setEl('kpi-csv',         liqFmt(totalBruta));
+  setEl('kpi-descuentos',  liqFmt(totalDescuentos));
+  setEl('kpi-promotor',    liqFmt(totalPromotor));
+
+  // ── 10. Update estado bar ──
+  var estadoBar = document.getElementById('dash-estado-bar');
+  if (estadoBar) {
+    if (totalProblemas > 0) {
+      estadoBar.className = 'estado-bar estado-warn';
+      estadoBar.textContent = '⚠ HAY ' + totalProblemas + ' PROBLEMA(S) PENDIENTE(S) - Revisa la sección de alertas arriba';
+    } else {
+      estadoBar.className = 'estado-bar estado-ok';
+      estadoBar.textContent = '✅ Todo en orden — Sin problemas detectados';
+    }
+  }
+
+  // ── 11. Update alert badges ──
+  function setBadge(id, count) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = count;
+    el.className = 'qty-badge ' + (count > 0 ? 'qty-warn' : 'qty-ok');
+    el.closest('tr') && el.closest('tr').classList.toggle('alert-row-warn', count > 0);
+  }
+
+  setBadge('dash-alerta-incompletos',        antIncompletos);
+  setBadge('dash-alerta-sin-comprobante',    antSinComp);
+  setBadge('dash-alerta-pendiente-extracto', antPendienteExtracto);
+  setBadge('dash-alerta-no-extracto',        antNoEncontrado);
+  setBadge('dash-alerta-mov-banco',          movBancoNoRegistrado);
+  setBadge('dash-ctrl-bnl-sin-mp',           bnlSinMp);
+  setBadge('dash-ctrl-descuadres',           0);
+  setBadge('dash-ctrl-mp-sin-bnl',           mpSinBnl);
+
+  // ── 12. RESUMEN POR EVENTO ──
+  var resumenTbody = document.getElementById('dash-resumen-tbody');
+  var resumenTitle = document.getElementById('dash-resumen-title');
+  if (resumenTbody && eventos.length) {
+    var rows = [];
+    eventos.forEach(function(e) {
+      var nomBNLUp = (e.nomBNL || e.nom || '').toUpperCase().trim();
+      var ventaData = byEvtNom[nomBNLUp] || { valor: 0, boletas: 0, ordenes: 0 };
+      if (!ventaData.valor) {
+        Object.keys(byEvtNom).forEach(function(k) {
+          if (k.includes(nomBNLUp) || nomBNLUp.includes(k)) {
+            ventaData = byEvtNom[k];
+          }
+        });
+      }
+      var antTotal = byEvtCodAnt[e.cod.toUpperCase()] || 0;
+      var pct = ventaData.valor > 0 ? Math.round(antTotal / ventaData.valor * 100) : 0;
+      var empNom = empMap[e.empresario.toUpperCase()] || e.empresario || '—';
+      rows.push({ cod: e.cod, nom: e.nom, emp: empNom, estado: e.estado || 'En venta', venta: ventaData.valor, ant: antTotal, pct: pct });
+    });
+    rows.sort(function(a, b) { return b.venta - a.venta; });
+    resumenTbody.innerHTML = '';
+    rows.forEach(function(row) {
+      var tr = document.createElement('tr');
+      var estadoColor = row.estado.toLowerCase().includes('finaliz') ? '#166534' :
+                        row.estado.toLowerCase().includes('liquid')  ? '#0369a1' : '#b45309';
+      tr.innerHTML =
+        '<td style="font-size:10px;color:#64748b">' + row.cod + '</td>' +
+        '<td style="font-size:11px;font-weight:600">' + row.nom + '</td>' +
+        '<td style="font-size:10px;color:#64748b">' + row.emp + '</td>' +
+        '<td style="font-size:10px;color:' + estadoColor + ';font-weight:600">' + row.estado + '</td>' +
+        '<td style="text-align:right;font-weight:700;font-family:monospace">' + liqFmt(row.venta) + '</td>' +
+        '<td style="text-align:right;font-family:monospace;color:#dc2626">' + liqFmt(row.ant) + '</td>' +
+        '<td style="text-align:right;font-family:monospace;color:' + (row.pct >= 100 ? '#166534' : '#b45309') + '">' + row.pct + '%</td>';
+      resumenTbody.appendChild(tr);
+    });
+    if (resumenTitle) resumenTitle.textContent = '📋 RESUMEN POR EVENTO (' + rows.length + ' eventos)';
+  } else if (resumenTbody) {
+    resumenTbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:16px">No hay eventos registrados. Carga datos de Ventas Diarias y configura los Eventos.</td></tr>';
+    if (resumenTitle) resumenTitle.textContent = '📋 RESUMEN POR EVENTO (0 eventos)';
+  }
+
+  // ── 13. TOP 10 EVENTOS POR VENTAS ──
+  var top10Tbody = document.getElementById('dash-top10-tbody');
+  if (top10Tbody) {
+    var evtList = Object.keys(byEvtNom).map(function(k) {
+      return { nom: k, valor: byEvtNom[k].valor, boletas: byEvtNom[k].boletas };
+    }).sort(function(a, b) { return b.valor - a.valor; }).slice(0, 10);
+
+    top10Tbody.innerHTML = '';
+    evtList.forEach(function(ev, i) {
+      var pct = totalBruta > 0 ? (ev.valor / totalBruta * 100).toFixed(1) : '0.0';
+      var barW = evtList[0].valor > 0 ? Math.round(ev.valor / evtList[0].valor * 100) : 0;
+      var evtMatch = eventos.find(function(e) {
+        var n = (e.nomBNL || e.nom || '').toUpperCase().trim();
+        return n === ev.nom || n.includes(ev.nom) || ev.nom.includes(n);
+      });
+      var empNom = evtMatch ? (empMap[(evtMatch.empresario||'').toUpperCase()] || evtMatch.empresario || '—') : '—';
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td class="rank">#' + (i + 1) + '</td>' +
+        '<td class="evt-name">' + ev.nom + '</td>' +
+        '<td class="small-txt">' + empNom + '</td>' +
+        '<td class="num">' + Math.round(ev.boletas).toLocaleString('es-CO') + '</td>' +
+        '<td class="num">' + liqFmt(ev.valor) + '</td>' +
+        '<td><div class="top-bar"><div class="top-fill" style="width:' + barW + '%"></div><span>' + pct + '%</span></div></td>';
+      top10Tbody.appendChild(tr);
+    });
+    if (!evtList.length) {
+      top10Tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:16px">Sin datos de ventas aún.</td></tr>';
+    }
+  }
+}
+
+// ── Hook refreshDashboard() to run automatically ──
+
+// Run on dashboard open
+var _dashOrigShow = showSheet;
+showSheet = function(idx) {
+  _dashOrigShow(idx);
+  if (idx === 0) setTimeout(refreshDashboard, 200);
+};
+
+// Run when any data sheet updates
+var _dashOrigUpdateCount = typeof updateCount === 'function' ? updateCount : null;
+if (_dashOrigUpdateCount) {
+  updateCount = function(idx) {
+    _dashOrigUpdateCount(idx);
+    // Refresh dashboard when ventas, MP, anticipos, or acumulados change
+    if ([7, 8, 16, 22, 23, 24].includes(idx)) setTimeout(refreshDashboard, 400);
+  };
+}
+
+// Run on initial page load
+setTimeout(refreshDashboard, 800);
 </script>
 
 </body>
