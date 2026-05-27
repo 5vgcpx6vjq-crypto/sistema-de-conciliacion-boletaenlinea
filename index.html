@@ -1107,21 +1107,21 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;fon
   <div class="section-title">🎟️ PROMOTORES Y CUPONES</div>
   <table class="data-table">
     <thead><tr><th>Indicador</th><th>Valor</th><th>Descripción</th></tr></thead>
-    <tbody><tr>
+    <tbody id="dash-prom-tbody"><tr>
   <td>Promotores con ventas registradas</td>
-  <td class="num">$5</td>
+  <td class="num" id="dash-prom-count">—</td>
   <td class="small-txt">Cantidad de vendedores con al menos 1 venta</td>
 </tr><tr>
-  <td>Total efectivo en manos de promotores</td>
-  <td class="num">$0</td>
-  <td class="small-txt">Efectivo que aún no han entregado al empresario</td>
+  <td>Total ventas vía promotor</td>
+  <td class="num" id="dash-prom-total">—</td>
+  <td class="small-txt">Suma de ventas cobradas por promotores</td>
 </tr><tr>
   <td>Cupones únicos usados</td>
-  <td class="num">$5</td>
+  <td class="num" id="dash-cup-count">—</td>
   <td class="small-txt">Códigos de cupón con al menos 1 uso</td>
 </tr><tr>
-  <td>Descuento total aplicado</td>
-  <td class="num">$598.000</td>
+  <td>Descuento total por cupones</td>
+  <td class="num" id="dash-cup-desc">—</td>
   <td class="small-txt">Suma de descuentos por cupones (asume el empresario)</td>
 </tr></tbody>
   </table>
@@ -4557,6 +4557,15 @@ function calcAlertasCobros() {
 
   container.innerHTML = html;
 
+  // Guardar resultado para que refreshDashboard pueda leerlo
+  var montoBajoRevision = casos.reduce(function(s, c) { return s + (c.servWeb || 0); }, 0);
+  window._alertasDashCache = { casos: casos.length, monto: montoBajoRevision };
+  // Actualizar badges del dashboard si están visibles
+  if (typeof refreshDashboard === 'function') {
+    clearTimeout(window._alertasDashTimer);
+    window._alertasDashTimer = setTimeout(refreshDashboard, 200);
+  }
+
   // Wire up input listener once per container
   if (!container._alertasListenerSet) {
     container._alertasListenerSet = true;
@@ -5998,8 +6007,7 @@ function vbApplyDateFilter() {
     var sel = document.getElementById('vb-event-select');
     var code = sel ? sel.value : '';
     if (code) {
-      if (wrap)  wrap.style.display  = '';
-      if (empty) empty.style.display = 'none';
+      onVbEventSelect(code); // re-render event detail without date filter
     } else {
       if (wrap)  wrap.style.display  = 'none';
       if (empty) empty.style.display = '';
@@ -6130,6 +6138,11 @@ function vbApplyDateFilter() {
   html += '</tr>';
   html += '</tbody></table></div>';
   resultsDiv.innerHTML = html;
+
+  // If an event is also selected, refresh its detail with the active date filter
+  var selEvt = document.getElementById('vb-event-select');
+  var selCode = selEvt ? selEvt.value : '';
+  if (selCode) onVbEventSelect(selCode);
 }
 
 function vbClearDateFilter() {
@@ -8862,6 +8875,13 @@ showSheet = function(idx) {
       }
     } catch(e) {}
     _badge('🔄 Actualizado en tiempo real', '#1d4ed8');
+    // Refrescar Dashboard si el dato afecta KPIs o alertas
+    if (['bnl_acumulado_v1','bnl_sheets_v2','bnl_s16_v1','bnl_s15_v1'].includes(key)) {
+      clearTimeout(window._dashRefreshTimer);
+      window._dashRefreshTimer = setTimeout(function() {
+        if (typeof refreshDashboard === 'function') refreshDashboard();
+      }, 500);
+    }
   }
 
   // ── Secuencia principal: cargar Firebase → restaurar UI → escuchar cambios ──
@@ -9268,6 +9288,47 @@ function refreshDashboard() {
   setBadge('dash-ctrl-bnl-sin-mp',           bnlSinMp);
   setBadge('dash-ctrl-descuadres',           0);
   setBadge('dash-ctrl-mp-sin-bnl',           mpSinBnl);
+
+  // ── 11b. Alertas cobros (from calcAlertasCobros cache) ──
+  var alertasCache = window._alertasDashCache || {};
+  setBadge('dash-ctrl-casos', alertasCache.casos || 0);
+  var elMonto = document.getElementById('dash-ctrl-monto');
+  if (elMonto) {
+    var montoVal = alertasCache.monto || 0;
+    elMonto.textContent = liqFmt(montoVal);
+    elMonto.className = 'qty-badge ' + (montoVal > 0 ? 'qty-warn' : 'qty-ok');
+    var trMonto = elMonto.closest('tr');
+    if (trMonto) trMonto.classList.toggle('alert-row-warn', montoVal > 0);
+  }
+
+  // ── 11c. Promotores y Cupones ──
+  var promRows = liqReadRows(5);
+  var promNombres = new Set();
+  var promTotal = 0;
+  promRows.forEach(function(r) {
+    var nombre = (r[2] || '').trim();
+    var total  = liqNum(r[9] || '0');
+    if (nombre && !/nombre\s*promotor/i.test(nombre)) {
+      promNombres.add(nombre.toUpperCase());
+      promTotal += total;
+    }
+  });
+  setEl('dash-prom-count', String(promNombres.size || '—'));
+  setEl('dash-prom-total', promTotal > 0 ? liqFmt(promTotal) : '—');
+
+  var cupRows = liqReadRows(6);
+  var cupCodigos = new Set();
+  var cupDesc = 0;
+  cupRows.forEach(function(r) {
+    var cod  = (r[1] || '').trim();
+    var desc = liqNum(r[11] || '0');
+    if (cod && !/c.?digo|cupón|cupon/i.test(cod)) {
+      cupCodigos.add(cod.toUpperCase());
+      cupDesc += desc;
+    }
+  });
+  setEl('dash-cup-count', String(cupCodigos.size || '—'));
+  setEl('dash-cup-desc', cupDesc > 0 ? liqFmt(cupDesc) : '—');
 
   // ── 12. RESUMEN POR EVENTO ──
   var resumenTbody = document.getElementById('dash-resumen-tbody');
