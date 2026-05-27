@@ -5504,7 +5504,6 @@ function syncFichaToEmpresarios(data) {
     existingRow.querySelectorAll('td').forEach(td => td.classList.add('modified'));
     const existingEmpCode = existingRow.querySelectorAll('td')[1] ? existingRow.querySelectorAll('td')[1].textContent.trim() : '';
     if (existingEmpCode && data.nombreEvento) _linkEmpToEvento(data.nombreEvento, existingEmpCode);
-    showToast('🏢 Empresarios actualizado', `Datos de "${razon}" actualizados desde la Ficha Técnica`);
   } else {
     // Add new row with auto-generated EMP-XXX code
     let maxCode = 0;
