@@ -7639,8 +7639,13 @@ function mpCruce() {
   });
   if (bnlNoMpHdrIdx < 0 || mpNoBnlHdrIdx < 0) return;
 
+  // Cargar notas guardadas
+  let _mpNotas = window._cruceNotasCache || {};
+  if (!Object.keys(_mpNotas).length) {
+    try { _mpNotas = JSON.parse(localStorage.getItem('bnl_cruce_notas_v1') || '{}'); } catch(e) {}
+  }
+
   // Eliminar filas de datos anteriores de ambas secciones (del final hacia atrás)
-  // Sección BNL sin MP: filas entre bnlNoMpHdrIdx+3 y mpNoBnlHdrIdx-1
   const bnlDataStart = bnlNoMpHdrIdx + 3;
   const bnlDataEnd   = mpNoBnlHdrIdx - 1;
   for (let i = bnlDataEnd; i >= bnlDataStart; i--) {
@@ -7649,11 +7654,22 @@ function mpCruce() {
 
   // Insertar filas de BNL sin MP
   const insertRef = allRows[mpNoBnlHdrIdx];
-  function mkCell(text, style, editable) {
+  function mkCell(text, style) {
     const td = document.createElement('td');
     td.style.cssText = style || 'font-size:10.0px';
     td.textContent = text || '';
-    if (editable) { td.contentEditable = 'true'; td.dataset.orig = text || ''; }
+    return td;
+  }
+  function mkNota(notaKey, style) {
+    const td = document.createElement('td');
+    td.style.cssText = (style || 'font-size:10.0px;color:#0000FF') +
+      ';cursor:text;min-width:80px;outline:none';
+    td.contentEditable = 'true';
+    td.setAttribute('data-nota-key', notaKey);
+    const saved = _mpNotas[notaKey] || '';
+    td.textContent = saved;
+    td.title = 'Haz clic para escribir una nota (se guarda automáticamente)';
+    if (!saved) td.style.fontStyle = 'italic';
     return td;
   }
 
@@ -7668,7 +7684,6 @@ function mpCruce() {
     for (const r of bnlNoMp) {
       const tr = document.createElement('tr'); tr.style.height = '15px';
       const orderId  = String(r[0]||'').trim();
-      // Buscar fecha: columna que tenga formato de fecha/hora
       let fecha = '';
       for (let c = 1; c < Math.min(r.length, 6); c++) {
         if (/\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4}/.test(r[c]||'')) { fecha = r[c]; break; }
@@ -7677,14 +7692,15 @@ function mpCruce() {
       const cliente  = String(r[9]||r[8]||'').trim();
       const tipoPago = String(r[7]||r[6]||'').trim();
       const total    = liqFmt(liqNum(r[8]||r[3]));
+      const nKey     = 'mp14-bnl-' + orderId;
       tr.appendChild(mkCell('', 'font-size:11.0px'));
       tr.appendChild(mkCell(orderId,  'font-size:10.0px;text-align:center'));
       tr.appendChild(mkCell(fecha,    'font-size:10.0px;text-align:center'));
       tr.appendChild(mkCell(evento,   'font-size:10.0px'));
       tr.appendChild(mkCell(cliente,  'font-size:10.0px'));
       tr.appendChild(mkCell(tipoPago, 'font-size:10.0px;text-align:center'));
-      tr.appendChild(mkCell(total,    'font-size:10.0px;text-align:right', true));
-      tr.appendChild(mkCell('',       'font-size:10.0px;color:#0000FF', true));
+      tr.appendChild(mkCell(total,    'font-size:10.0px;text-align:right'));
+      tr.appendChild(mkNota(nKey,     'font-size:10.0px;color:#0000FF'));
       tr.appendChild(mkCell('', 'font-size:11.0px'));
       tbody.insertBefore(tr, insertRef);
     }
@@ -7716,26 +7732,42 @@ function mpCruce() {
       const tr = document.createElement('tr'); tr.style.height = '15px';
       const numOp = String(r[0]||'').trim();
       const fecha  = String(r[1]||'').trim();
-      const cobro  = liqFmt(liqNum(r[4])); // r[4]=Cobro Bruto tras preprocesado
-      // Buscar referencia externa en columnas 6+
+      const cobro  = liqFmt(liqNum(r[4]));
       let refExt = '';
       for (let c = 6; c < r.length; c++) {
         const v = String(r[c]||'').trim();
         if (v && /BNL|^\d{4,9}$/.test(v)) { refExt = v; break; }
         if (v && !refExt && c > 6) refExt = v;
       }
+      const nKey = 'mp14-mp-' + numOp;
       tr.appendChild(mkCell('', 'font-size:11.0px'));
       tr.appendChild(mkCell(numOp,  'font-size:10.0px;text-align:center'));
       tr.appendChild(mkCell(fecha,  'font-size:10.0px;text-align:center'));
       tr.appendChild(mkCell(cobro,  'font-size:10.0px;text-align:right'));
       tr.appendChild(mkCell(refExt, 'font-size:10.0px;text-align:center'));
       tr.appendChild(mkCell('? Sin orden en BNL', 'font-size:10.0px;text-align:center'));
-      tr.appendChild(mkCell('', 'font-size:10.0px;color:#0000FF', true));
-      tr.appendChild(mkCell('', 'font-size:11.0px', true));
+      tr.appendChild(mkNota(nKey,   'font-size:10.0px;color:#0000FF'));
       tr.appendChild(mkCell('', 'font-size:11.0px'));
       tbody.appendChild(tr);
     }
   }
+
+  // Guardar notas al escribir (delegación sobre tbody)
+  // Remover listener previo para evitar duplicados
+  if (tbody._mpNotaListener) tbody.removeEventListener('input', tbody._mpNotaListener);
+  tbody._mpNotaListener = function(e) {
+    const td = e.target.closest('td[data-nota-key]');
+    if (!td) return;
+    const key = td.getAttribute('data-nota-key');
+    const val = td.textContent.trim();
+    if (val) _mpNotas[key] = val; else delete _mpNotas[key];
+    td.style.fontStyle = val ? 'normal' : 'italic';
+    const json = JSON.stringify(_mpNotas);
+    window._cruceNotasCache = _mpNotas;
+    try { localStorage.setItem('bnl_cruce_notas_v1', json); } catch(e2) {}
+    if (typeof window._fbForceWrite === 'function') window._fbForceWrite('bnl_cruce_notas_v1', json);
+  };
+  tbody.addEventListener('input', tbody._mpNotaListener);
 
   // ── 7. Marcar pestaña como actualizada ──
   const tab14 = document.getElementById('tab_14');
