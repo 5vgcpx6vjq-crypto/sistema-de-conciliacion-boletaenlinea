@@ -9061,6 +9061,8 @@ showSheet = function(idx) {
     if (_origRestoreStatic) restoreStaticSheets = _origRestoreStatic;
 
     _badge('✅ Sincronizado', '#16a34a');
+    // Dashboard refresh: todos los datos ya están en DOM
+    if (typeof refreshDashboard === 'function') setTimeout(refreshDashboard, 150);
 
     // 7. Escuchar cambios en tiempo real de otros usuarios
     KEYS.forEach(key => {
@@ -9360,8 +9362,8 @@ if (_dashOrigUpdateCount) {
   };
 }
 
-// Run on initial page load
-setTimeout(refreshDashboard, 800);
+// Fallback: si Firebase tarda más de 3s o falla, refrescar de todas formas
+setTimeout(refreshDashboard, 3000);
 </script>
 
 </body>
