@@ -3934,7 +3934,7 @@ function loadFichaTecnica(evt) {
       const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:false});
       const data = parseFichaRows(rows);
       localStorage.setItem(FICHA_LS_KEY, JSON.stringify(data));
-      renderFicha(data);
+      renderFicha(data, true);  // true = user upload, show toasts
       // mark tab as uploaded
       document.getElementById('tab_25').classList.add('uploaded');
     } catch(err) {
@@ -5457,7 +5457,7 @@ renderFicha = function(data) {
 </script>
 <script>
 // ── Sync Ficha Técnica data → Empresarios sheet (sheet 3) ──
-function syncFichaToEmpresarios(data) {
+function syncFichaToEmpresarios(data, silent) {
   const panel = document.getElementById('sheet_3');
   if (!panel) return;
   const tbl = panel.querySelector('table');
@@ -5526,7 +5526,7 @@ function syncFichaToEmpresarios(data) {
     });
     tbody.appendChild(tr);
     if (data.nombreEvento) _linkEmpToEvento(data.nombreEvento, newCode);
-    showToast('🏢 Empresario agregado', `"${razon}" (${newCode}) añadido a la hoja Empresarios`);
+    if (!silent) showToast('🏢 Empresario agregado', `"${razon}" (${newCode}) añadido a la hoja Empresarios`);
   }
 }
 
@@ -5580,9 +5580,9 @@ function _linkEmpToEvento(nombreEvento, empCode) {
 
 // Hook into renderFicha
 const _fichaOrig3 = renderFicha;
-renderFicha = function(data) {
+renderFicha = function(data, _fromUser) {
   _fichaOrig3(data);
-  syncFichaToEmpresarios(data);
+  syncFichaToEmpresarios(data, !_fromUser);  // silent=true when called from Firebase restore
 };
 
 // ── Auto-detect new events when Ventas or MP files are loaded ──
