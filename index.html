@@ -8886,15 +8886,21 @@ showSheet = function(idx) {
 
   // ── Secuencia principal: cargar Firebase → restaurar UI → escuchar cambios ──
   window.addEventListener('DOMContentLoaded', async () => {
-    _badge('⏳ Sincronizando...', '#64748b');
+    _badge('⏳ Cargando datos de la nube...', '#64748b');
 
-    // 1. Sincronizar keys: Firebase→local si Firebase lo tiene;
-    //    local→Firebase si Firebase no lo tiene (maneja claves nuevas como bnl_b17_v1).
-    // Para bnl_s16_v1: Firebase SIEMPRE gana (fuente de verdad); además se aplica
-    // dedup en arranque para romper el ciclo donde localStorage stale re-introduce dups.
-    for (const key of KEYS) {
+    // 1. Sincronizar TODOS los keys en PARALELO (mucho más rápido que secuencial).
+    // Resultado: todos los snapshots llegan juntos en lugar de uno por uno.
+    const snapResults = await Promise.all(
+      KEYS.map(key =>
+        _db.ref('d/' + key).get()
+          .then(snap => ({ key, snap }))
+          .catch(e => { console.warn('[Sync] Fetch falló:', key, e); return { key, snap: null }; })
+      )
+    );
+
+    for (const { key, snap } of snapResults) {
+      if (!snap) continue;
       try {
-        const snap = await _db.ref('d/' + key).get();
         if (snap.exists() && snap.val()?.v) {
           if (key === 'bnl_s16_v1') {
             // Sheet 16: Firebase es siempre fuente de verdad + dedup integrado
@@ -8913,16 +8919,13 @@ showSheet = function(idx) {
                   return true;
                 });
                 if (clean.length < d16.rows.length) {
-                  // Dups detectados en Firebase durante arranque → limpiar ya
                   const cj = JSON.stringify({ rows: clean, _ts: 9999999999999 });
                   _writing = true; _lsSet('bnl_s16_v1', cj); _writing = false;
                   window._fbForceWrite('bnl_s16_v1', cj);
-                  // Renderizar inmediatamente con datos limpios (no esperar el timer de 250ms)
                   if (typeof window._s16Restore === 'function') window._s16Restore(clean);
                   console.log('[S16] Arranque dedup: ' + (d16.rows.length - clean.length) + ' dup(s) eliminados');
                 } else {
                   _writing = true; _lsSet('bnl_s16_v1', snap.val().v); _writing = false;
-                  // Renderizar inmediatamente desde Firebase (no esperar _restoreS16FromLS a 450ms)
                   if (typeof window._s16Restore === 'function') window._s16Restore(d16.rows);
                 }
               } else {
@@ -8932,20 +8935,15 @@ showSheet = function(idx) {
               _writing = true; _lsSet('bnl_s16_v1', snap.val().v); _writing = false;
             }
           } else if (key === 'bnl_sheets_v2') {
-            // bnl_sheets_v2: comparar _ts interno para manejar F5 antes de que Firebase confirme
-            // Si localStorage es más nuevo (subida reciente no confirmada), empujar a Firebase
             const lsRaw2 = localStorage.getItem(key);
             let lsTs2 = 0, fbTs2 = 0;
             try { lsTs2 = JSON.parse(lsRaw2)?._ts || 0; } catch(e) {}
             try { fbTs2 = JSON.parse(snap.val().v)?._ts || 0; } catch(e) {}
             if (lsTs2 > fbTs2) {
-              // localStorage más nuevo → pushear a Firebase (recupera datos de subida reciente)
               console.log('[S2] localStorage más nuevo (_ts ' + lsTs2 + ' > ' + fbTs2 + ') → push a Firebase');
               _db.ref('d/' + key).set({ v: lsRaw2, t: lsTs2 })
                 .catch(e => console.warn('[Sync] Push S2 LS→FB falló:', e));
-              // localStorage ya tiene los datos correctos, no sobrescribir
             } else {
-              // Firebase más nuevo → aplicar
               _writing = true; _lsSet(key, snap.val().v); _writing = false;
             }
           } else {
@@ -8958,7 +8956,7 @@ showSheet = function(idx) {
                 .catch(e => console.warn('[Sync] Push LS→FB falló:', key, e));
             } else {
               _writing = true; _lsSet(key, snap.val().v); _writing = false;
-              // Para notas del cruce: poblar cache en memoria inmediatamente
+              if (key === 'bnl_acumulado_v1') window._acumFromFirebase = true;
               if (key === 'bnl_cruce_notas_v1') {
                 try { window._cruceNotasCache = JSON.parse(snap.val().v); } catch(e2) {}
               }
@@ -8980,7 +8978,7 @@ showSheet = function(idx) {
             }
           }
         }
-      } catch(e) { console.warn('[Sync] Fetch falló:', key, e); }
+      } catch(e) { console.warn('[Sync] Procesando key falló:', key, e); }
     }
 
     // 2. Restaurar acumulados (BK_LS_KEY)
@@ -8993,11 +8991,13 @@ showSheet = function(idx) {
         if (d.mp?.length)          { restoreToSheet(SHEET_MAP.dst.mp,         d.mp);         n += d.mp.length; }
         if (d.bancolombia?.length)   restoreToSheet(SHEET_MAP.dst.anticipos,  d.bancolombia);
         if (d.extracto?.length)      restoreToSheet(SHEET_MAP.dst.extracto,   d.extracto);
-        if (n > 0 && d.lastBackup) {
+        if (n > 0) {
           const bn = document.getElementById('restore-banner');
           const bm = document.getElementById('restore-msg');
           if (bn && bm) {
-            bm.textContent = `✅ Acumulados restaurados (${d.lastBackup}) — ${d.bnl?.length||0} BNL + ${d.mp?.length||0} MP`;
+            const src = window._acumFromFirebase ? '☁️ Firebase' : '💾 local';
+            const lbl = d.lastBackup ? `(${d.lastBackup})` : '';
+            bm.textContent = `✅ Acumulados restaurados desde ${src} ${lbl} — ${d.bnl?.length||0} BNL + ${d.mp?.length||0} MP`;
             bn.style.display = 'flex';
           }
         }
@@ -9080,7 +9080,17 @@ showSheet = function(idx) {
     if (_origRestoreAll)    restoreAllSheets    = _origRestoreAll;
     if (_origRestoreStatic) restoreStaticSheets = _origRestoreStatic;
 
-    _badge('✅ Sincronizado', '#16a34a');
+    // Build sync summary for badge
+    try {
+      const _accD = JSON.parse(localStorage.getItem('bnl_acumulado_v1') || '{}');
+      const _bnlN = _accD.bnl?.length || 0;
+      const _mpN  = _accD.mp?.length  || 0;
+      if (_bnlN > 0 || _mpN > 0) {
+        _badge('✅ Sincronizado — ' + _bnlN + ' BNL · ' + _mpN + ' MP', '#16a34a');
+      } else {
+        _badge('✅ Sincronizado', '#16a34a');
+      }
+    } catch(e) { _badge('✅ Sincronizado', '#16a34a'); }
     // Dashboard refresh: todos los datos ya están en DOM
     if (typeof refreshDashboard === 'function') setTimeout(refreshDashboard, 150);
 
@@ -9425,6 +9435,64 @@ if (_dashOrigUpdateCount) {
 
 // Fallback: si Firebase tarda más de 3s o falla, refrescar de todas formas
 setTimeout(refreshDashboard, 3000);
+</script>
+
+<!-- ── Overlay de carga Firebase ── -->
+<div id="fb-loading-overlay" style="
+  display:none;
+  position:fixed;inset:0;z-index:99999;
+  background:rgba(15,23,42,0.72);
+  backdrop-filter:blur(3px);
+  align-items:center;justify-content:center;flex-direction:column;gap:12px;
+">
+  <div style="background:#1e293b;border-radius:12px;padding:28px 36px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5);">
+    <div style="font-size:28px;margin-bottom:8px;">☁️</div>
+    <div style="color:#f1f5f9;font-size:15px;font-weight:700;margin-bottom:4px;">Cargando datos desde la nube...</div>
+    <div style="color:#94a3b8;font-size:12px;" id="fb-loading-msg">Conectando con Firebase</div>
+    <div style="margin-top:14px;height:4px;background:#334155;border-radius:2px;overflow:hidden;width:200px;">
+      <div id="fb-loading-bar" style="height:100%;background:#3b82f6;border-radius:2px;width:0%;transition:width .4s ease;"></div>
+    </div>
+  </div>
+</div>
+<script>
+(function() {
+  // Mostrar overlay solo si localStorage vacío (usuario nuevo o dispositivo diferente)
+  var hasLocal = localStorage.getItem('bnl_acumulado_v1');
+  if (!hasLocal) {
+    var ov = document.getElementById('fb-loading-overlay');
+    var bar = document.getElementById('fb-loading-bar');
+    var msg = document.getElementById('fb-loading-msg');
+    if (ov) ov.style.display = 'flex';
+    // Barra de progreso animada (indicador visual mientras Firebase carga)
+    var pct = 0;
+    var tid = setInterval(function() {
+      pct = Math.min(pct + (pct < 60 ? 8 : pct < 85 ? 3 : 0.5), 92);
+      if (bar) bar.style.width = pct + '%';
+    }, 300);
+    // Escuchar cuando Firebase termina (badge cambia a ✅)
+    var obs = new MutationObserver(function() {
+      var badge = document.getElementById('_sync_badge');
+      if (badge && badge.textContent.includes('✅')) {
+        clearInterval(tid);
+        if (bar) bar.style.width = '100%';
+        if (msg) msg.textContent = 'Datos cargados correctamente';
+        setTimeout(function() {
+          if (ov) ov.style.display = 'none';
+        }, 600);
+        obs.disconnect();
+      }
+    });
+    document.addEventListener('DOMContentLoaded', function() {
+      obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+      if (msg) msg.textContent = 'Descargando acumulados...';
+      // Fallback: ocultar overlay a los 12s de todas formas
+      setTimeout(function() {
+        clearInterval(tid);
+        if (ov) ov.style.display = 'none';
+      }, 12000);
+    });
+  }
+})();
 </script>
 
 </body>
