@@ -8745,15 +8745,25 @@ showSheet = function(idx) {
         ? preprocessMpRows(rows) : rows;
       _s16RenderData(idx, processedRows, fileName, editable);
       if ((idx === 7 || idx === 8) && fileName !== 'restaurado') {
+        // 1. Construir el objeto a guardar
+        let _nv = null;
         try {
-          let cur = {};
-          try { cur = JSON.parse(localStorage.getItem('bnl_sheets_v2') || '{}'); } catch(e2) {}
-          cur[idx] = { rows: processedRows };
-          cur._ts = Date.now();
-          const nv = JSON.stringify(cur);
-          _writing = true; _lsSet('bnl_sheets_v2', nv); _writing = false;
+          let _cur2 = {};
+          try { _cur2 = JSON.parse(localStorage.getItem('bnl_sheets_v2') || '{}'); } catch(e2) {}
+          _cur2[idx] = { rows: processedRows };
+          _cur2._ts = Date.now();
+          _nv = JSON.stringify(_cur2);
+        } catch(e) { console.error('[Sheets] Error al preparar datos:', e); }
+        // 2. Guardar en localStorage (independiente: si falla no bloquea Firebase)
+        if (_nv) {
+          try { _writing = true; _lsSet('bnl_sheets_v2', _nv); _writing = false; }
+          catch(lsE) { _writing = false; console.warn('[Sheets] localStorage lleno, solo guardando en Firebase:', lsE); }
+        }
+        // 3. Guardar en Firebase SIEMPRE (incluso si localStorage falló)
+        if (_nv) {
+          try {
           console.log('[Sheets] Guardando sheet ' + idx + ' en Firebase: ' + processedRows.length + ' filas...');
-          _db.ref('d/bnl_sheets_v2').set({ v: nv, t: Date.now() })
+          _db.ref('d/bnl_sheets_v2').set({ v: _nv, t: Date.now() })
             .then(function() {
               console.log('[Sheets] ✅ Sheet ' + idx + ' guardada OK en Firebase');
               _badge('✅ ' + processedRows.length + ' filas guardadas en Firebase', '#16a34a');
@@ -8762,6 +8772,9 @@ showSheet = function(idx) {
               console.error('[Sheets] ❌ Error Firebase:', e);
               _badge('❌ Error al guardar en Firebase', '#dc2626');
             });
+          } catch(fbE) { console.error('[Sheets] Error iniciando write Firebase:', fbE); }
+        }
+        try {
           // Auto-detectar eventos nuevos al cargar Ventas Diarias
           if (idx === 7 && typeof autoDetectNuevosEventos === 'function') {
             setTimeout(function() { autoDetectNuevosEventos(processedRows, _badge); }, 700);
