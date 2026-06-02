@@ -1520,7 +1520,7 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;fon
       <span class="row-badge" id="info_7"></span>
     </div>
     <div class="toolbar-right">
-      <label class="btn btn-upload"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Cargar archivo<input type="file" accept=".csv,.xlsx,.xls,.xlsm" onchange="loadFile(event,7,false)" hidden></label><button class="btn btn-export" onclick="exportCSV(7,'Ventas Diarias')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Exportar CSV</button><span class="upload-status" id="status_7"></span>
+      <label class="btn btn-upload"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Cargar archivo<input type="file" accept=".csv,.xlsx,.xls,.xlsm" onchange="loadFile(event,7,false)" hidden></label><button class="btn btn-export" onclick="exportCSV(7,'Ventas Diarias')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Exportar CSV</button><button class="btn" style="background:#1d4ed8;color:#fff;border:none;" onclick="if(window._fbRefreshSheets)window._fbRefreshSheets();" title="Descargar datos más recientes de la nube">☁️ Actualizar</button><span class="upload-status" id="status_7"></span>
     </div>
   </div>
   <div class="table-scroll" id="tablewrap_7">
@@ -1534,7 +1534,7 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;fon
       <span class="row-badge" id="info_8"></span>
     </div>
     <div class="toolbar-right">
-      <label class="btn btn-upload"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Cargar archivo<input type="file" accept=".csv,.xlsx,.xls,.xlsm" onchange="loadFile(event,8,false)" hidden></label><button class="btn btn-export" onclick="exportCSV(8,'Mercado Pago')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Exportar CSV</button><span class="upload-status" id="status_8"></span>
+      <label class="btn btn-upload"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Cargar archivo<input type="file" accept=".csv,.xlsx,.xls,.xlsm" onchange="loadFile(event,8,false)" hidden></label><button class="btn btn-export" onclick="exportCSV(8,'Mercado Pago')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Exportar CSV</button><button class="btn" style="background:#1d4ed8;color:#fff;border:none;" onclick="if(window._fbRefreshSheets)window._fbRefreshSheets();" title="Descargar datos más recientes de la nube">☁️ Actualizar</button><span class="upload-status" id="status_8"></span>
     </div>
   </div>
   <div class="table-scroll" id="tablewrap_8">
@@ -8801,7 +8801,12 @@ showSheet = function(idx) {
     try {
       if (key === 'bnl_sheets_v2') {
         if (_origRestoreAll) _origRestoreAll();
-        _restoreSheets_v2();
+        setTimeout(function() {
+          _restoreSheets_v2();
+          setTimeout(function() {
+            if (typeof updateCount === 'function') { updateCount(7); updateCount(8); }
+          }, 250);
+        }, 50);
       } else if (key === 'bnl_static_v1') {
         // Merge seguro: no sobreescribe celdas que el usuario editó localmente
         if (typeof window._mergeStaticFromRemote === 'function') window._mergeStaticFromRemote();
@@ -8874,7 +8879,7 @@ showSheet = function(idx) {
         });
       }
     } catch(e) {}
-    _badge('🔄 Actualizado en tiempo real', '#1d4ed8');
+    _badge(key === 'bnl_sheets_v2' ? '🔄 CSV sincronizado — Ventas/MP actualizados' : '🔄 Actualizado en tiempo real', '#1d4ed8');
     // Refrescar Dashboard si el dato afecta KPIs o alertas
     if (['bnl_acumulado_v1','bnl_sheets_v2','bnl_s16_v1','bnl_s15_v1'].includes(key)) {
       clearTimeout(window._dashRefreshTimer);
@@ -9139,6 +9144,53 @@ showSheet = function(idx) {
     _db.ref('d/' + key).set({ v: value, t: Date.now() })
       .catch(e => console.warn('[Sync] ForceWrite falló:', e));
   };
+
+  // Exponer para acceso externo y fallback manual
+  window._restoreSheets_v2 = _restoreSheets_v2;
+
+  // Forzar re-fetch de bnl_sheets_v2 desde Firebase y restaurar DOM
+  window._fbRefreshSheets = function() {
+    _badge('⏳ Actualizando desde Firebase...', '#64748b');
+    _db.ref('d/bnl_sheets_v2').get()
+      .then(function(snap) {
+        if (snap.exists() && snap.val()?.v) {
+          _writing = true; _lsSet('bnl_sheets_v2', snap.val().v); _writing = false;
+          _restoreSheets_v2();
+          setTimeout(function() {
+            if (typeof updateCount === 'function') { updateCount(7); updateCount(8); }
+            if (typeof refreshDashboard === 'function') refreshDashboard();
+          }, 200);
+          _badge('✅ Sincronizado desde Firebase', '#16a34a');
+        } else {
+          _badge('ℹ️ No hay datos CSV en Firebase', '#64748b');
+        }
+      })
+      .catch(function(e) { _badge('❌ Error al conectar con Firebase', '#dc2626'); });
+  };
+
+  // ── Hook showSheet: si tab 7/8 abre con DOM vacío pero LS tiene datos → restaurar ──
+  var _fbOrigShowSheet = typeof showSheet === 'function' ? showSheet : null;
+  if (_fbOrigShowSheet) {
+    showSheet = function(idx) {
+      _fbOrigShowSheet(idx);
+      if (idx === 7 || idx === 8) {
+        var wrap = document.getElementById('tablewrap_' + idx);
+        var hasRendered = wrap && wrap.querySelector('tbody tr') &&
+                          !wrap.querySelector('td[style*="italic"]');
+        if (!hasRendered) {
+          var lsRaw = localStorage.getItem('bnl_sheets_v2');
+          if (lsRaw) {
+            try {
+              var lsData = JSON.parse(lsRaw);
+              if (lsData[idx] && Array.isArray(lsData[idx].rows) && lsData[idx].rows.length >= 2) {
+                setTimeout(_restoreSheets_v2, 80);
+              }
+            } catch(e2) {}
+          }
+        }
+      }
+    };
+  }
 
   console.log('[Sync] Firebase listo ✅ — sistema-de-conciliacion');
 })();
