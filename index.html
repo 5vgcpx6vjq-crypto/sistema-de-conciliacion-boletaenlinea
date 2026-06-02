@@ -3375,7 +3375,8 @@ async function importBackupHtml(file) {
       window._s16Sync(window._s16Save() || []);
     }
     try {
-      const s2empty = JSON.stringify({ _ts: Date.now() });
+      // _ts: 1 para que no sobreescriba futuros uploads de otros dispositivos
+      const s2empty = JSON.stringify({ _ts: 1 });
       localStorage.setItem('bnl_sheets_v2', s2empty);
       if (typeof window._fbForceWrite === 'function') {
         window._fbForceWrite('bnl_sheets_v2', s2empty);
@@ -3604,7 +3605,7 @@ async function runBackup() {
     const s2 = JSON.parse(localStorage.getItem('bnl_sheets_v2') || '{}');
     delete s2[SHEET_MAP.src.ventas];
     delete s2[SHEET_MAP.src.mp];
-    s2._ts = Date.now();
+    s2._ts = 1; // _ts bajo: no sobreescribir uploads de otros dispositivos
     const s2json = JSON.stringify(s2);
     localStorage.setItem('bnl_sheets_v2', s2json);
     if (typeof window._fbForceWrite === 'function') window._fbForceWrite('bnl_sheets_v2', s2json);
@@ -8791,10 +8792,10 @@ showSheet = function(idx) {
     // siempre aplicar el dato remoto aunque tenga timestamp más viejo.
     // Esto garantiza que borrados/cambios de otra pestaña siempre se reflejen.
     const isS16 = key === 'bnl_s16_v1';
-    const isSheets2 = key === 'bnl_sheets_v2';
     const s16HasLocalEdits = isS16 && (typeof _s16Dirty !== 'undefined') && _s16Dirty;
-    // s16 y bnl_sheets_v2 siempre aplican remoto; otras claves comparan timestamps
-    if (!isS16 && !isSheets2 || s16HasLocalEdits) {
+    // Solo s16 (con edits pendientes) omite la comparación de timestamps.
+    // bnl_sheets_v2 y demás claves comparan: si local es más nuevo, no sobreescribir.
+    if (!isS16 || s16HasLocalEdits) {
       try {
         const lTs = JSON.parse(cur)?._ts || 0;
         const rTs = JSON.parse(value)?._ts || 0;
