@@ -8589,8 +8589,12 @@ showSheet = function(idx) {
           return;
         }
         console.log('[S2] Sheet ' + idx + ': restaurando ' + d.rows.length + ' filas...');
-        const origRender = window._origRenderData;
-        if (typeof origRender === 'function') origRender(idx, d.rows, 'restaurado', false);
+        const origRender = window._origRenderData || (typeof renderData === 'function' ? renderData : null);
+        if (typeof origRender === 'function') {
+          origRender(idx, d.rows, 'restaurado', false);
+          // updateCount es llamado por origRender, pero forzamos por si acaso
+          setTimeout(function() { if (typeof updateCount === 'function') updateCount(idx); }, 100);
+        }
         console.log('[S2] Sheet ' + idx + ': restaurado OK');
       });
     } catch(e) { console.error('[S2] Error:', e); }
@@ -8797,12 +8801,29 @@ showSheet = function(idx) {
         if (lTs > rTs) return;
       } catch(e) {}
     }
-    _writing = true; _lsSet(key, value); _writing = false;
+    var _lsWriteOk = false;
+    try { _writing = true; _lsSet(key, value); _writing = false; _lsWriteOk = true; }
+    catch(lsErr) { _writing = false; console.warn('[Sync] localStorage write falló:', key, lsErr); }
     try {
       if (key === 'bnl_sheets_v2') {
         if (_origRestoreAll) _origRestoreAll();
         setTimeout(function() {
-          _restoreSheets_v2();
+          if (_lsWriteOk) {
+            _restoreSheets_v2();
+          } else {
+            // localStorage falló → restaurar directamente desde value recibido
+            try {
+              var _d2 = JSON.parse(value);
+              var origR = window._origRenderData || (typeof renderData === 'function' ? renderData : null);
+              if (origR) {
+                [7, 8].forEach(function(si) {
+                  if (_d2[si] && Array.isArray(_d2[si].rows) && _d2[si].rows.length >= 2) {
+                    origR(si, _d2[si].rows, 'restaurado', false);
+                  }
+                });
+              }
+            } catch(e2) { console.warn('[Sync] Restore directo falló:', e2); }
+          }
           setTimeout(function() {
             if (typeof updateCount === 'function') { updateCount(7); updateCount(8); }
           }, 250);
@@ -9148,21 +9169,40 @@ showSheet = function(idx) {
   // Exponer para acceso externo y fallback manual
   window._restoreSheets_v2 = _restoreSheets_v2;
 
-  // Forzar re-fetch de bnl_sheets_v2 desde Firebase y restaurar DOM
+  // Sincronizar bnl_sheets_v2: push si local es más nuevo, pull si local está vacío
   window._fbRefreshSheets = function() {
-    _badge('⏳ Actualizando desde Firebase...', '#64748b');
+    _badge('⏳ Sincronizando...', '#64748b');
+    var lsRaw = localStorage.getItem('bnl_sheets_v2');
+    var lsTs = 0, hasLocal = false;
+    try {
+      var lsObj = JSON.parse(lsRaw);
+      lsTs = lsObj?._ts || 0;
+      hasLocal = !!(lsObj && (lsObj[7] || lsObj[8]));
+    } catch(e) {}
+
     _db.ref('d/bnl_sheets_v2').get()
       .then(function(snap) {
-        if (snap.exists() && snap.val()?.v) {
+        var fbTs = 0;
+        try { fbTs = JSON.parse(snap.exists() ? snap.val()?.v : null)?._ts || 0; } catch(e) {}
+
+        if (hasLocal && lsTs >= fbTs) {
+          // Local tiene datos iguales o más nuevos → empujar a Firebase
+          _db.ref('d/bnl_sheets_v2').set({ v: lsRaw, t: lsTs || Date.now() })
+            .then(function() {
+              _badge('✅ Datos enviados — otros usuarios verán los cambios en segundos', '#16a34a');
+            })
+            .catch(function(e) { _badge('❌ Error al conectar con Firebase', '#dc2626'); });
+        } else if (snap.exists() && snap.val()?.v) {
+          // Firebase tiene datos más nuevos → descargar
           _writing = true; _lsSet('bnl_sheets_v2', snap.val().v); _writing = false;
           _restoreSheets_v2();
           setTimeout(function() {
             if (typeof updateCount === 'function') { updateCount(7); updateCount(8); }
             if (typeof refreshDashboard === 'function') refreshDashboard();
           }, 200);
-          _badge('✅ Sincronizado desde Firebase', '#16a34a');
+          _badge('✅ Datos descargados desde Firebase', '#16a34a');
         } else {
-          _badge('ℹ️ No hay datos CSV en Firebase', '#64748b');
+          _badge('ℹ️ No hay datos CSV en la nube', '#64748b');
         }
       })
       .catch(function(e) { _badge('❌ Error al conectar con Firebase', '#dc2626'); });
