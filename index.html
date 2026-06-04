@@ -8566,7 +8566,16 @@ showSheet = function(idx) {
         const wrap = document.getElementById('tablewrap_' + idx);
         if (!wrap) return;
         if (!d || !Array.isArray(d.rows) || d.rows.length < 2) {
-          // Sin datos en Firebase/localStorage → limpiar la hoja
+          // Sin datos en localStorage — solo limpiar si el DOM no tiene datos reales
+          const hasDomData = (function() {
+            const t = wrap.querySelector('table');
+            if (!t) return false;
+            const firstTr = t.querySelector('tbody tr');
+            if (!firstTr) return false;
+            const firstTd = firstTr.querySelector('td');
+            return firstTd && !firstTd.style.fontStyle; // italic = placeholder
+          })();
+          if (hasDomData) { console.log('[S2] Sheet ' + idx + ': sin datos en LS pero DOM tiene datos → preservado'); return; }
           const table = wrap.querySelector('table');
           if (table) {
             const tbody = table.querySelector('tbody');
@@ -9193,7 +9202,7 @@ showSheet = function(idx) {
       hasLocal = !!(lsObj && (lsObj[7] || lsObj[8]));
     } catch(e) {}
 
-    _db.ref('d/bnl_sheets_v2').get()
+    _db.ref('d/bnl_sheets_v2').once('value')
       .then(function(snap) {
         var fbTs = 0;
         try { fbTs = JSON.parse(snap.exists() ? snap.val()?.v : null)?._ts || 0; } catch(e) {}
@@ -9204,7 +9213,7 @@ showSheet = function(idx) {
             .then(function() {
               _badge('✅ Datos enviados — otros usuarios verán los cambios en segundos', '#16a34a');
             })
-            .catch(function(e) { _badge('❌ Error al conectar con Firebase', '#dc2626'); });
+            .catch(function(e) { _badge('❌ Error al sincronizar: ' + (e && e.message ? e.message : e), '#dc2626'); });
         } else if (snap.exists() && snap.val()?.v) {
           // Firebase tiene datos más nuevos → descargar
           _writing = true; _lsSet('bnl_sheets_v2', snap.val().v); _writing = false;
@@ -9218,7 +9227,7 @@ showSheet = function(idx) {
           _badge('ℹ️ No hay datos CSV en la nube', '#64748b');
         }
       })
-      .catch(function(e) { _badge('❌ Error al conectar con Firebase', '#dc2626'); });
+      .catch(function(e) { _badge('❌ Error al conectar: ' + (e && e.message ? e.message : e), '#dc2626'); });
   };
 
   // Borrar datos CSV de hojas 7 y 8 en localStorage + Firebase (todos los dispositivos)
