@@ -3375,7 +3375,7 @@ async function importBackupHtml(file) {
       window._s16Sync(window._s16Save() || []);
     }
     try {
-      const s2empty = JSON.stringify({ _ts: Date.now() });
+      const s2empty = JSON.stringify({ _ts: Date.now(), _cleared: true });
       localStorage.setItem('bnl_sheets_v2', s2empty);
       if (typeof window._fbForceWrite === 'function') {
         window._fbForceWrite('bnl_sheets_v2', s2empty);
@@ -3605,6 +3605,7 @@ async function runBackup() {
     delete s2[SHEET_MAP.src.ventas];
     delete s2[SHEET_MAP.src.mp];
     s2._ts = Date.now();
+    s2._cleared = true;
     const s2json = JSON.stringify(s2);
     localStorage.setItem('bnl_sheets_v2', s2json);
     if (typeof window._fbForceWrite === 'function') window._fbForceWrite('bnl_sheets_v2', s2json);
@@ -8773,6 +8774,7 @@ showSheet = function(idx) {
         try {
           let _cur2 = {};
           try { _cur2 = JSON.parse(localStorage.getItem('bnl_sheets_v2') || '{}'); } catch(e2) {}
+          delete _cur2._cleared;
           _cur2[idx] = { rows: processedRows };
           _cur2._ts = Date.now();
           _nv = JSON.stringify(_cur2);
@@ -8836,6 +8838,25 @@ showSheet = function(idx) {
         const lTs = JSON.parse(cur)?._ts || 0;
         const rTs = JSON.parse(value)?._ts || 0;
         if (lTs >= rTs) return;
+        // Remote es más nuevo. Para bnl_sheets_v2: merge inteligente.
+        // Si Firebase NO trae _cleared:true (cierre diario / limpiar),
+        // conservar hojas locales que Firebase no tenga.
+        if (key === 'bnl_sheets_v2') {
+          try {
+            var rData = JSON.parse(value);
+            var lData = JSON.parse(cur || '{}');
+            if (!rData._cleared) {
+              var merged = false;
+              [7, 8].forEach(function(si) {
+                if (!rData[si] && lData[si] && Array.isArray(lData[si].rows) && lData[si].rows.length >= 2) {
+                  rData[si] = lData[si];
+                  merged = true;
+                }
+              });
+              if (merged) value = JSON.stringify(rData);
+            }
+          } catch(mergeE) {}
+        }
       } catch(e) {}
     }
     var _lsWriteOk = false;
@@ -9204,49 +9225,30 @@ showSheet = function(idx) {
   // Exponer para acceso externo y fallback manual
   window._restoreSheets_v2 = _restoreSheets_v2;
 
-  // Sincronizar bnl_sheets_v2: push si local es más nuevo, pull si local está vacío
+  // Sincronizar bnl_sheets_v2: push-only — siempre envía local a Firebase, nunca sobreescribe local
   window._fbRefreshSheets = function() {
     _badge('⏳ Sincronizando...', '#64748b');
     var lsRaw = localStorage.getItem('bnl_sheets_v2');
-    var lsTs = 0, hasLocal = false;
+    var hasLocal = false;
     try {
       var lsObj = JSON.parse(lsRaw);
-      lsTs = lsObj?._ts || 0;
       hasLocal = !!(lsObj && (lsObj[7] || lsObj[8]));
     } catch(e) {}
-
-    _fbRead('bnl_sheets_v2')
-      .then(function(snap) {
-        var fbTs = 0, fbV = null;
-        try { fbV = snap && snap.v ? snap.v : null; fbTs = JSON.parse(fbV || '{}')?._ts || 0; } catch(e) {}
-
-        if (hasLocal && lsTs >= fbTs) {
-          // Local tiene datos iguales o más nuevos → empujar a Firebase
-          _fbWrite('bnl_sheets_v2', lsRaw)
-            .then(function() {
-              _badge('✅ Datos enviados — otros usuarios verán los cambios en segundos', '#16a34a');
-            })
-            .catch(function(e) { _badge('❌ Error al sincronizar: ' + (e && e.message ? e.message : e), '#dc2626'); });
-        } else if (fbV) {
-          // Firebase tiene datos más nuevos → descargar
-          _writing = true; _lsSet('bnl_sheets_v2', fbV); _writing = false;
-          _restoreSheets_v2();
-          setTimeout(function() {
-            if (typeof updateCount === 'function') { updateCount(7); updateCount(8); }
-            if (typeof refreshDashboard === 'function') refreshDashboard();
-          }, 200);
-          _badge('✅ Datos descargados desde Firebase', '#16a34a');
-        } else {
-          _badge('ℹ️ No hay datos CSV en la nube', '#64748b');
-        }
+    if (!hasLocal) {
+      _badge('ℹ️ No hay datos CSV locales para enviar', '#64748b');
+      return;
+    }
+    _fbWrite('bnl_sheets_v2', lsRaw)
+      .then(function() {
+        _badge('✅ Datos enviados — otros usuarios verán los cambios en segundos', '#16a34a');
       })
-      .catch(function(e) { _badge('❌ Error al conectar: ' + (e && e.message ? e.message : e), '#dc2626'); });
+      .catch(function(e) { _badge('❌ Error al sincronizar: ' + (e && e.message ? e.message : e), '#dc2626'); });
   };
 
   // Borrar datos CSV de hojas 7 y 8 en localStorage + Firebase (todos los dispositivos)
   window._fbClearSheets = function() {
     if (!confirm('¿Borrar los datos de Ventas Diarias y Mercado Pago en TODOS los dispositivos?\n\nEsta acción no se puede deshacer.')) return;
-    var emptyVal = JSON.stringify({ _ts: Date.now() });
+    var emptyVal = JSON.stringify({ _ts: Date.now(), _cleared: true });
     // Limpiar DOM
     if (typeof clearDailySheet === 'function') { clearDailySheet(7); clearDailySheet(8); }
     // Limpiar localStorage
