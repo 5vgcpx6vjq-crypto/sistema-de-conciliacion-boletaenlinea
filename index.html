@@ -8785,33 +8785,35 @@ showSheet = function(idx) {
           try { _writing = true; _lsSet('bnl_sheets_v2', _nv); _writing = false; }
           catch(lsE) { _writing = false; console.warn('[Sheets] localStorage lleno, solo guardando en Firebase:', lsE); }
         }
-        // 3. Guardar en Firebase (siempre escribe _nv que ya contiene ambas hojas fusionadas)
-        if (_nv) {
-          try {
-            console.log('[Sheets] Guardando sheet ' + idx + ' en Firebase: ' + processedRows.length + ' filas...');
-            var _nvSnapshot = _nv;
-            _fbWrite('bnl_sheets_v2', _nvSnapshot)
-              .then(function() {
-                console.log('[Sheets] ✅ Sheet ' + idx + ' guardada OK en Firebase');
-                _badge('✅ ' + processedRows.length + ' filas guardadas en Firebase', '#16a34a');
-                // Corrective write: if localStorage now has newer combined data (race condition fix)
-                var latestRaw = localStorage.getItem('bnl_sheets_v2');
-                if (latestRaw && latestRaw !== _nvSnapshot) {
-                  console.log('[Sheets] Corrective write: localStorage más nuevo → re-publicando ambas hojas en Firebase');
-                  _fbWrite('bnl_sheets_v2', latestRaw)
-                    .then(function() {
-                      console.log('[Sheets] ✅ Corrective write OK — ambas hojas en Firebase');
-                      _badge('✅ Ambas hojas guardadas en Firebase', '#16a34a');
-                    })
-                    .catch(function() {});
-                }
-              })
-              .catch(function(e) {
-                console.error('[Sheets] ❌ Error Firebase:', e);
-                _badge('❌ Error al guardar: ' + (e && e.message ? e.message : e), '#dc2626');
-              });
-          } catch(fbE) { console.error('[Sheets] Error iniciando write Firebase:', fbE); }
-        }
+        // 3. Guardar en Firebase via transaction atómica
+        // La transaction fusiona solo la hoja que se acaba de subir con el estado
+        // actual de Firebase, evitando que VD y MP se sobreescriban mutuamente.
+        var _txIdx = idx;
+        var _txRows = processedRows;
+        try {
+          console.log('[Sheets] Transaction sheet ' + _txIdx + ' → Firebase: ' + _txRows.length + ' filas...');
+          _db.ref('d/bnl_sheets_v2').transaction(function(current) {
+            try {
+              var combined = {};
+              if (current && current.v) combined = JSON.parse(current.v);
+              delete combined._cleared;
+              combined[_txIdx] = { rows: _txRows };
+              combined._ts = Date.now();
+              return { v: JSON.stringify(combined), t: combined._ts };
+            } catch(txE) { return current; }
+          }).then(function(result) {
+            if (!result || !result.committed) { console.warn('[Sheets] TX no committed'); return; }
+            console.log('[Sheets] ✅ Sheet ' + _txIdx + ' TX OK en Firebase');
+            _badge('✅ ' + _txRows.length + ' filas guardadas en Firebase', '#16a34a');
+            var fbVal = result.snapshot && result.snapshot.val && result.snapshot.val();
+            if (fbVal && fbVal.v) {
+              _writing = true; _lsSet('bnl_sheets_v2', fbVal.v); _writing = false;
+            }
+          }).catch(function(e) {
+            console.error('[Sheets] ❌ Error TX Firebase:', e);
+            _badge('❌ Error al guardar: ' + (e && e.message ? e.message : e), '#dc2626');
+          });
+        } catch(fbE) { console.error('[Sheets] Error iniciando TX Firebase:', fbE); }
         try {
           // Auto-detectar eventos nuevos al cargar Ventas Diarias
           if (idx === 7 && typeof autoDetectNuevosEventos === 'function') {
