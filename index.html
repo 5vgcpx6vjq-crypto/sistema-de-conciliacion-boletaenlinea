@@ -3375,8 +3375,7 @@ async function importBackupHtml(file) {
       window._s16Sync(window._s16Save() || []);
     }
     try {
-      // _ts: 1 para que no sobreescriba futuros uploads de otros dispositivos
-      const s2empty = JSON.stringify({ _ts: 1 });
+      const s2empty = JSON.stringify({ _ts: Date.now() });
       localStorage.setItem('bnl_sheets_v2', s2empty);
       if (typeof window._fbForceWrite === 'function') {
         window._fbForceWrite('bnl_sheets_v2', s2empty);
@@ -3605,7 +3604,7 @@ async function runBackup() {
     const s2 = JSON.parse(localStorage.getItem('bnl_sheets_v2') || '{}');
     delete s2[SHEET_MAP.src.ventas];
     delete s2[SHEET_MAP.src.mp];
-    s2._ts = 1; // _ts bajo: no sobreescribir uploads de otros dispositivos
+    s2._ts = Date.now();
     const s2json = JSON.stringify(s2);
     localStorage.setItem('bnl_sheets_v2', s2json);
     if (typeof window._fbForceWrite === 'function') window._fbForceWrite('bnl_sheets_v2', s2json);
