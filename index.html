@@ -8493,6 +8493,39 @@ showSheet = function(idx) {
     return fetch(_FB_ROOT + key + '.json').then(function(r) { return r.json(); });
   }
 
+  // Escritura debounced para bnl_sheets_v2: cancela la request anterior si aún no completó,
+  // y siempre escribe el localStorage más reciente al disparar. Evita condición de carrera
+  // donde dos uploads rápidos llegan a Firebase en orden inverso al enviado.
+  var _s2WriteTimer = null;
+  var _s2WriteCtrl = null;
+  function _fbWriteSheets2(rowCount, badgeFn) {
+    clearTimeout(_s2WriteTimer);
+    if (_s2WriteCtrl) { try { _s2WriteCtrl.abort(); } catch(e) {} _s2WriteCtrl = null; }
+    _s2WriteTimer = setTimeout(function() {
+      var latestRaw = localStorage.getItem('bnl_sheets_v2');
+      if (!latestRaw) return;
+      var ctrl = new AbortController();
+      _s2WriteCtrl = ctrl;
+      fetch(_FB_ROOT + 'bnl_sheets_v2.json', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ v: latestRaw, t: Date.now() }),
+        signal: ctrl.signal
+      }).then(function(r) {
+        _s2WriteCtrl = null;
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }).then(function() {
+        if (badgeFn) badgeFn('✅ Guardado en Firebase', '#16a34a');
+        console.log('[Sheets] ✅ bnl_sheets_v2 guardado OK (debounced)');
+      }).catch(function(e) {
+        if (e && e.name === 'AbortError') { console.log('[Sheets] Write anterior cancelado (superseded)'); return; }
+        console.error('[Sheets] ❌ Error Firebase:', e);
+        if (badgeFn) badgeFn('❌ Error al guardar: ' + (e && e.message ? e.message : e), '#dc2626');
+      });
+    }, 300);
+  }
+
   const KEYS = ['bnl_acumulado_v1','bnl_sheets_v2','bnl_static_v1','bnl_ficha_v1','bnl_b17_v1','bnl_s16_v1','bnl_s15_v1','bnl_eventos_v1','bnl_cruce_notas_v1','bnl_alertas_v1'];
   let _writing = false;
   const _timers = {};
@@ -8784,21 +8817,10 @@ showSheet = function(idx) {
           try { _writing = true; _lsSet('bnl_sheets_v2', _nv); _writing = false; }
           catch(lsE) { _writing = false; console.warn('[Sheets] localStorage lleno, solo guardando en Firebase:', lsE); }
         }
-        // 3. Guardar en Firebase SIEMPRE (incluso si localStorage falló)
-        if (_nv) {
-          try {
-          console.log('[Sheets] Guardando sheet ' + idx + ' en Firebase: ' + processedRows.length + ' filas...');
-          _fbWrite('bnl_sheets_v2', _nv)
-            .then(function() {
-              console.log('[Sheets] ✅ Sheet ' + idx + ' guardada OK en Firebase');
-              _badge('✅ ' + processedRows.length + ' filas guardadas en Firebase', '#16a34a');
-            })
-            .catch(function(e) {
-              console.error('[Sheets] ❌ Error Firebase:', e);
-              _badge('❌ Error al guardar: ' + (e && e.message ? e.message : e), '#dc2626');
-            });
-          } catch(fbE) { console.error('[Sheets] Error iniciando write Firebase:', fbE); }
-        }
+        // 3. Guardar en Firebase con debounce: cancela write anterior si sigue en vuelo,
+        //    y siempre escribe el localStorage más reciente para evitar condición de carrera.
+        console.log('[Sheets] Encolando write sheet ' + idx + ' → Firebase (debounced)...');
+        _fbWriteSheets2(processedRows.length, _badge);
         try {
           // Auto-detectar eventos nuevos al cargar Ventas Diarias
           if (idx === 7 && typeof autoDetectNuevosEventos === 'function') {
