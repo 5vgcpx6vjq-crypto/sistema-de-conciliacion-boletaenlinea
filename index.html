@@ -1520,7 +1520,7 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;fon
       <span class="row-badge" id="info_7"></span>
     </div>
     <div class="toolbar-right">
-      <label class="btn btn-upload"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Cargar archivo<input type="file" accept=".csv,.xlsx,.xls,.xlsm" onchange="loadFile(event,7,false)" hidden></label><button class="btn btn-export" onclick="exportCSV(7,'Ventas Diarias')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Exportar CSV</button><button class="btn" style="background:#1d4ed8;color:#fff;border:none;" onclick="if(window._fbRefreshSheets)window._fbRefreshSheets();" title="Descargar datos más recientes de la nube">☁️ Actualizar</button><span class="upload-status" id="status_7"></span>
+      <label class="btn btn-upload"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Cargar archivo<input type="file" accept=".csv,.xlsx,.xls,.xlsm" onchange="loadFile(event,7,false)" hidden></label><button class="btn btn-export" onclick="exportCSV(7,'Ventas Diarias')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Exportar CSV</button><button class="btn" style="background:#1d4ed8;color:#fff;border:none;" onclick="if(window._fbRefreshSheets)window._fbRefreshSheets();" title="Descargar datos más recientes de la nube">☁️ Actualizar</button><button class="btn" style="background:#dc2626;color:#fff;border:none;" onclick="if(window._fbClearSheets)window._fbClearSheets();" title="Borrar datos de Ventas y MP en todos los dispositivos">🗑 Limpiar</button><span class="upload-status" id="status_7"></span>
     </div>
   </div>
   <div class="table-scroll" id="tablewrap_7">
@@ -1534,7 +1534,7 @@ body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;fon
       <span class="row-badge" id="info_8"></span>
     </div>
     <div class="toolbar-right">
-      <label class="btn btn-upload"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Cargar archivo<input type="file" accept=".csv,.xlsx,.xls,.xlsm" onchange="loadFile(event,8,false)" hidden></label><button class="btn btn-export" onclick="exportCSV(8,'Mercado Pago')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Exportar CSV</button><button class="btn" style="background:#1d4ed8;color:#fff;border:none;" onclick="if(window._fbRefreshSheets)window._fbRefreshSheets();" title="Descargar datos más recientes de la nube">☁️ Actualizar</button><span class="upload-status" id="status_8"></span>
+      <label class="btn btn-upload"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Cargar archivo<input type="file" accept=".csv,.xlsx,.xls,.xlsm" onchange="loadFile(event,8,false)" hidden></label><button class="btn btn-export" onclick="exportCSV(8,'Mercado Pago')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Exportar CSV</button><button class="btn" style="background:#1d4ed8;color:#fff;border:none;" onclick="if(window._fbRefreshSheets)window._fbRefreshSheets();" title="Descargar datos más recientes de la nube">☁️ Actualizar</button><button class="btn" style="background:#dc2626;color:#fff;border:none;" onclick="if(window._fbClearSheets)window._fbClearSheets();" title="Borrar datos de Ventas y MP en todos los dispositivos">🗑 Limpiar</button><span class="upload-status" id="status_8"></span>
     </div>
   </div>
   <div class="table-scroll" id="tablewrap_8">
@@ -8811,7 +8811,7 @@ showSheet = function(idx) {
       try {
         const lTs = JSON.parse(cur)?._ts || 0;
         const rTs = JSON.parse(value)?._ts || 0;
-        if (lTs > rTs) return;
+        if (lTs >= rTs) return;
       } catch(e) {}
     }
     var _lsWriteOk = false;
@@ -9219,6 +9219,20 @@ showSheet = function(idx) {
         }
       })
       .catch(function(e) { _badge('❌ Error al conectar con Firebase', '#dc2626'); });
+  };
+
+  // Borrar datos CSV de hojas 7 y 8 en localStorage + Firebase (todos los dispositivos)
+  window._fbClearSheets = function() {
+    if (!confirm('¿Borrar los datos de Ventas Diarias y Mercado Pago en TODOS los dispositivos?\n\nEsta acción no se puede deshacer.')) return;
+    var emptyVal = JSON.stringify({ _ts: Date.now() });
+    // Limpiar DOM
+    if (typeof clearDailySheet === 'function') { clearDailySheet(7); clearDailySheet(8); }
+    // Limpiar localStorage
+    try { _writing = true; _lsSet('bnl_sheets_v2', emptyVal); _writing = false; } catch(e) { _writing = false; }
+    // Limpiar Firebase (propaga a todos)
+    _db.ref('d/bnl_sheets_v2').set({ v: emptyVal, t: Date.now() })
+      .then(function() { _badge('✅ Hojas borradas — todos los dispositivos verán los cambios', '#16a34a'); })
+      .catch(function(e) { _badge('❌ Error al borrar en Firebase', '#dc2626'); });
   };
 
   // ── Hook showSheet: si tab 7/8 abre con DOM vacío pero LS tiene datos → restaurar ──
