@@ -9023,12 +9023,33 @@ showSheet = function(idx) {
             let lsTs2 = 0, fbTs2 = 0;
             try { lsTs2 = JSON.parse(lsRaw2)?._ts || 0; } catch(e) {}
             try { fbTs2 = JSON.parse(snap.val().v)?._ts || 0; } catch(e) {}
-            if (lsTs2 > fbTs2) {
-              console.log('[S2] localStorage más nuevo (_ts ' + lsTs2 + ' > ' + fbTs2 + ') → push a Firebase');
-              _db.ref('d/' + key).set({ v: lsRaw2, t: lsTs2 })
-                .catch(e => console.warn('[Sync] Push S2 LS→FB falló:', e));
+            if (lsTs2 >= fbTs2) {
+              // Local igual o más nuevo → push a Firebase (usando REST, no SDK)
+              console.log('[S2] localStorage igual/más nuevo (_ts ' + lsTs2 + ' >= ' + fbTs2 + ') → push a Firebase');
+              _fbWrite(key, lsRaw2).catch(e => console.warn('[Sync] Push S2 LS→FB falló:', e));
             } else {
-              _writing = true; _lsSet(key, snap.val().v); _writing = false;
+              // Firebase más nuevo → merge inteligente: conservar hojas locales que Firebase no traiga
+              var fbVal2 = snap.val().v;
+              var didMerge2 = false;
+              try {
+                var rData2 = JSON.parse(fbVal2);
+                var lData2 = JSON.parse(lsRaw2 || '{}');
+                if (!rData2._cleared) {
+                  [7, 8].forEach(function(si) {
+                    if (!rData2[si] && lData2[si] && Array.isArray(lData2[si].rows) && lData2[si].rows.length >= 2) {
+                      rData2[si] = lData2[si];
+                      didMerge2 = true;
+                    }
+                  });
+                  if (didMerge2) fbVal2 = JSON.stringify(rData2);
+                }
+              } catch(mergeE2) {}
+              _writing = true; _lsSet(key, fbVal2); _writing = false;
+              // Si hubo merge, subir a Firebase para que otros dispositivos vean los datos completos
+              if (didMerge2) {
+                console.log('[S2] Merge en arranque: hojas locales preservadas → subiendo a Firebase');
+                _fbWrite(key, fbVal2).catch(e => console.warn('[Sync] Push merge arranque falló:', e));
+              }
             }
           } else {
             const fbTs = snap.val().t || 0;
