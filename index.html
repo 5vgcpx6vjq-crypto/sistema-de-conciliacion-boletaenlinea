@@ -8476,6 +8476,22 @@ showSheet = function(idx) {
   try { firebase.initializeApp(_fbCfg); _db = firebase.database(); }
   catch(e) { console.error('[Sync] Init falló:', e); return; }
 
+  const _FB_ROOT = 'https://sistema-de-conciliacion-default-rtdb.firebaseio.com/d/';
+
+  // Escribe via REST API (más confiable que SDK .set() cuando WebSocket está inestable)
+  function _fbWrite(key, value) {
+    return fetch(_FB_ROOT + key + '.json', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ v: value, t: Date.now() })
+    }).then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+  }
+
+  // Lee via REST API
+  function _fbRead(key) {
+    return fetch(_FB_ROOT + key + '.json').then(function(r) { return r.json(); });
+  }
+
   const KEYS = ['bnl_acumulado_v1','bnl_sheets_v2','bnl_static_v1','bnl_ficha_v1','bnl_b17_v1','bnl_s16_v1','bnl_s15_v1','bnl_eventos_v1','bnl_cruce_notas_v1','bnl_alertas_v1'];
   let _writing = false;
   const _timers = {};
@@ -8489,8 +8505,7 @@ showSheet = function(idx) {
     if (!_writing && KEYS.includes(key)) {
       clearTimeout(_timers[key]);
       _timers[key] = setTimeout(() => {
-        _db.ref('d/' + key).set({ v: value, t: Date.now() })
-          .catch(e => console.warn('[Sync] Write falló:', e));
+        _fbWrite(key, value).catch(e => console.warn('[Sync] Write falló:', key, e));
       }, 500);
     }
   };
@@ -8771,14 +8786,14 @@ showSheet = function(idx) {
         if (_nv) {
           try {
           console.log('[Sheets] Guardando sheet ' + idx + ' en Firebase: ' + processedRows.length + ' filas...');
-          _db.ref('d/bnl_sheets_v2').set({ v: _nv, t: Date.now() })
+          _fbWrite('bnl_sheets_v2', _nv)
             .then(function() {
               console.log('[Sheets] ✅ Sheet ' + idx + ' guardada OK en Firebase');
               _badge('✅ ' + processedRows.length + ' filas guardadas en Firebase', '#16a34a');
             })
             .catch(function(e) {
               console.error('[Sheets] ❌ Error Firebase:', e);
-              _badge('❌ Error al guardar en Firebase', '#dc2626');
+              _badge('❌ Error al guardar: ' + (e && e.message ? e.message : e), '#dc2626');
             });
           } catch(fbE) { console.error('[Sheets] Error iniciando write Firebase:', fbE); }
         }
@@ -9183,9 +9198,7 @@ showSheet = function(idx) {
   // Escritura directa a Firebase sin el delay de 500ms del interceptor
   // Usada por _s16ClearAndReload para garantizar que el borrado llega a Firebase antes de cualquier recarga
   window._fbForceWrite = function(key, value) {
-    if (!_db) return;
-    _db.ref('d/' + key).set({ v: value, t: Date.now() })
-      .catch(e => console.warn('[Sync] ForceWrite falló:', e));
+    _fbWrite(key, value).catch(e => console.warn('[Sync] ForceWrite falló:', key, e));
   };
 
   // Exponer para acceso externo y fallback manual
@@ -9202,21 +9215,21 @@ showSheet = function(idx) {
       hasLocal = !!(lsObj && (lsObj[7] || lsObj[8]));
     } catch(e) {}
 
-    _db.ref('d/bnl_sheets_v2').once('value')
+    _fbRead('bnl_sheets_v2')
       .then(function(snap) {
-        var fbTs = 0;
-        try { fbTs = JSON.parse(snap.exists() ? snap.val()?.v : null)?._ts || 0; } catch(e) {}
+        var fbTs = 0, fbV = null;
+        try { fbV = snap && snap.v ? snap.v : null; fbTs = JSON.parse(fbV || '{}')?._ts || 0; } catch(e) {}
 
         if (hasLocal && lsTs >= fbTs) {
           // Local tiene datos iguales o más nuevos → empujar a Firebase
-          _db.ref('d/bnl_sheets_v2').set({ v: lsRaw, t: lsTs || Date.now() })
+          _fbWrite('bnl_sheets_v2', lsRaw)
             .then(function() {
               _badge('✅ Datos enviados — otros usuarios verán los cambios en segundos', '#16a34a');
             })
             .catch(function(e) { _badge('❌ Error al sincronizar: ' + (e && e.message ? e.message : e), '#dc2626'); });
-        } else if (snap.exists() && snap.val()?.v) {
+        } else if (fbV) {
           // Firebase tiene datos más nuevos → descargar
-          _writing = true; _lsSet('bnl_sheets_v2', snap.val().v); _writing = false;
+          _writing = true; _lsSet('bnl_sheets_v2', fbV); _writing = false;
           _restoreSheets_v2();
           setTimeout(function() {
             if (typeof updateCount === 'function') { updateCount(7); updateCount(8); }
@@ -9239,9 +9252,9 @@ showSheet = function(idx) {
     // Limpiar localStorage
     try { _writing = true; _lsSet('bnl_sheets_v2', emptyVal); _writing = false; } catch(e) { _writing = false; }
     // Limpiar Firebase (propaga a todos)
-    _db.ref('d/bnl_sheets_v2').set({ v: emptyVal, t: Date.now() })
+    _fbWrite('bnl_sheets_v2', emptyVal)
       .then(function() { _badge('✅ Hojas borradas — todos los dispositivos verán los cambios', '#16a34a'); })
-      .catch(function(e) { _badge('❌ Error al borrar en Firebase', '#dc2626'); });
+      .catch(function(e) { _badge('❌ Error al borrar: ' + (e && e.message ? e.message : e), '#dc2626'); });
   };
 
   // ── Hook showSheet: si tab 7/8 abre con DOM vacío pero LS tiene datos → restaurar ──
