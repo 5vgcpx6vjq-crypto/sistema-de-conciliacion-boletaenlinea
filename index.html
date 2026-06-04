@@ -8789,10 +8789,22 @@ showSheet = function(idx) {
         if (_nv) {
           try {
             console.log('[Sheets] Guardando sheet ' + idx + ' en Firebase: ' + processedRows.length + ' filas...');
-            _fbWrite('bnl_sheets_v2', _nv)
+            var _nvSnapshot = _nv;
+            _fbWrite('bnl_sheets_v2', _nvSnapshot)
               .then(function() {
                 console.log('[Sheets] ✅ Sheet ' + idx + ' guardada OK en Firebase');
                 _badge('✅ ' + processedRows.length + ' filas guardadas en Firebase', '#16a34a');
+                // Corrective write: if localStorage now has newer combined data (race condition fix)
+                var latestRaw = localStorage.getItem('bnl_sheets_v2');
+                if (latestRaw && latestRaw !== _nvSnapshot) {
+                  console.log('[Sheets] Corrective write: localStorage más nuevo → re-publicando ambas hojas en Firebase');
+                  _fbWrite('bnl_sheets_v2', latestRaw)
+                    .then(function() {
+                      console.log('[Sheets] ✅ Corrective write OK — ambas hojas en Firebase');
+                      _badge('✅ Ambas hojas guardadas en Firebase', '#16a34a');
+                    })
+                    .catch(function() {});
+                }
               })
               .catch(function(e) {
                 console.error('[Sheets] ❌ Error Firebase:', e);
@@ -9027,7 +9039,7 @@ showSheet = function(idx) {
             if (lsTs2 >= fbTs2) {
               // Local igual o más nuevo → push a Firebase (usando REST, no SDK)
               console.log('[S2] localStorage igual/más nuevo (_ts ' + lsTs2 + ' >= ' + fbTs2 + ') → push a Firebase');
-              _fbWrite(key, lsRaw2).catch(e => console.warn('[Sync] Push S2 LS→FB falló:', e));
+              if (lsRaw2) _fbWrite(key, lsRaw2).catch(e => console.warn('[Sync] Push S2 LS→FB falló:', e));
             } else {
               // Firebase más nuevo → merge inteligente: conservar hojas locales que Firebase no traiga
               var fbVal2 = snap.val().v;
