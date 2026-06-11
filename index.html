@@ -8900,6 +8900,8 @@ showSheet = function(idx) {
           setTimeout(function() {
             if (typeof updateCount === 'function') { updateCount(7); updateCount(8); }
           }, 250);
+          // Recalcular totales Cierre Diario cuando llegan datos VD nuevos
+          setTimeout(function() { if (typeof cierreAutoCalc === 'function') cierreAutoCalc(); }, 400);
         }, 50);
       } else if (key === 'bnl_static_v1') {
         // Merge seguro: no sobreescribe celdas que el usuario editó localmente
@@ -9137,6 +9139,8 @@ showSheet = function(idx) {
     if (_origRestoreAll)    setTimeout(_origRestoreAll,    100);
     // 3b. Restaurar hojas CSV (Ventas Diarias sheet 7, Mercado Pago sheet 8)
     setTimeout(_restoreSheets_v2, 150);
+    // 3c. Recalcular totales en Cierre Diario después de restaurar VD (sheet 7)
+    setTimeout(function() { if (typeof cierreAutoCalc === 'function') cierreAutoCalc(); }, 700);
     // 4. Restaurar celdas editables (otras hojas, no sheet 16)
     if (_origRestoreStatic) setTimeout(_origRestoreStatic, 200);
     else if (typeof restoreStaticSheets === 'function') setTimeout(restoreStaticSheets, 200);
