@@ -2409,6 +2409,18 @@ function addRowAnticipo() {
 }
 
 function resetSheet(idx){
+  // Hojas con datos importantes: pedir confirmación explícita
+  const protegidas = [15, 16, 18, 19, 20, 21];
+  if (protegidas.includes(idx)) {
+    const ok = window.confirm(
+      '⚠️ ¿Restaurar hoja al estado original?\n\n' +
+      'Esto borrará todos los valores editados en pantalla.\n' +
+      'Los datos guardados en la nube NO se eliminan — puedes recuperarlos con F5.\n\n' +
+      '¿Continuar?'
+    );
+    if (!ok) return;
+  }
+  if (idx === 15) window._s15JustReset = true; // prevenir que beforeunload sobreescriba Firebase
   document.querySelectorAll('#tablewrap_'+idx+' td[contenteditable]').forEach(td=>{
     td.textContent=td.dataset.orig||''; td.classList.remove('modified');
   });
@@ -3666,10 +3678,21 @@ function accumulateRows(srcIdx, dstIdx, label) {
   let dstTbody = dstTable.querySelector('tbody');
   if (!dstTbody) { dstTbody = document.createElement('tbody'); dstTable.appendChild(dstTbody); }
 
-  // Date separator
+  // Date separator — usar la fecha real de los datos, no la fecha de hoy
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
-  const label2 = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  let label2 = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  // Intentar extraer la fecha real del primer registro de datos
+  for (let ri = 0; ri < srcRows.length; ri++) {
+    const cells = srcRows[ri].querySelectorAll('td');
+    const firstCell = cells[0] ? cells[0].textContent.trim() : '';
+    if (!/^\d{4,}$/.test(firstCell)) continue; // saltar filas sin ID numérico
+    for (let c = 1; c < Math.min(cells.length, 20); c++) {
+      const dk = typeof vbNormDate === 'function' ? vbNormDate(cells[c].textContent.trim()) : '';
+      if (dk) { label2 = dk; break; }
+    }
+    break; // usar el primer registro válido encontrado
+  }
   const cols = srcRows[0].querySelectorAll('td').length || 10;
   const sep = document.createElement('tr');
   sep.innerHTML = `<td colspan="${cols}" style="background:#1a3a6b;color:#fff;font-weight:bold;font-size:10px;padding:4px 10px;text-align:center">📅 ${label2} — ${label} (${srcRows.length} registros)</td>`;
@@ -4591,40 +4614,122 @@ function calcAlertasCobros() {
 }
 
 // ── Cierre Diario: auto-calcular Total ventas y # órdenes por fecha ──
-function cierreAutoCalc() {
+function cierreAutoCalc(force) {
   var wrap = document.getElementById('tablewrap_15');
   if (!wrap) return;
-  // No interrumpir si el usuario está editando en esta tabla
   var _ae = document.activeElement;
-  if (_ae && wrap.contains(_ae)) return;
+  // Con force=true se ejecuta aunque el foco siga dentro de la hoja 15
+  // (lo usa el disparador de "Cargado por" al registrar un nombre).
+  if (!force && _ae && wrap.contains(_ae)) return;
 
-  // Read VD data: current day + acumulado (dedup by Id Orden)
-  var rawRows = [].concat(liqReadRows(7), liqReadRows(22));
-  var seen = {};
   var byDate = {};
+  var seen = {};
+  var byDatePagos = {};
 
-  for (var ri = 0; ri < rawRows.length; ri++) {
-    var r = rawRows[ri];
-    var id = (r[0] || '').trim();
-    if (!id || id === 'Id Orden' || !/^\d{4,}$/.test(id)) continue;
-    if (seen[id]) continue;
-    seen[id] = true;
+  // Lee cada hoja por separado para aprovechar las filas separadoras del acumulado
+  [7, 22].forEach(function(sheetIdx) {
+    var panel = document.getElementById('sheet_' + sheetIdx);
+    if (!panel) return;
+    var tbl = panel.querySelector('table');
+    if (!tbl) return;
+    var trs = Array.from(tbl.querySelectorAll('tbody tr'));
+    var currentDk = ''; // fecha del separador actual
 
-    // Find fecha: scan cols 1-14 for a date pattern
-    var fecha = '';
-    for (var c = 1; c < Math.min(r.length, 15); c++) {
-      if (/\d{4}-\d{2}-\d{2}/.test(r[c] || '')) { fecha = r[c]; break; }
+    for (var ri = 0; ri < trs.length; ri++) {
+      var tds = trs[ri].querySelectorAll('td');
+      if (!tds.length) continue;
+      var firstTd = tds[0];
+
+      // Fila separadora (colspan ≥ 5): extrae fecha del texto "📅 YYYY-MM-DD — ..."
+      if (firstTd.colSpan >= 5 || tds.length <= 2) {
+        var sep = firstTd.textContent.trim();
+        var sm = sep.match(/(\d{4}-\d{2}-\d{2})/);
+        if (sm) currentDk = sm[1];
+        continue;
+      }
+
+      // Fila de datos
+      var id = firstTd.textContent.trim();
+      if (!id || id === 'Id Orden' || !/^\d{4,}$/.test(id)) continue;
+      if (seen[id]) continue;
+      seen[id] = true;
+
+      // Intentar extraer fecha de las celdas; si no, usar el separador
+      var dk = '';
+      for (var c = 1; c < Math.min(tds.length, 20); c++) {
+        dk = vbNormDate(tds[c].textContent.trim());
+        if (dk) break;
+      }
+      if (!dk) dk = currentDk;
+      if (!dk) continue;
+
+      // Buscar la columna de valor total (columnas 8, 4, 3 en ese orden)
+      var total = 0;
+      var v8 = liqNum((tds[8] || {}).textContent || '');
+      var v4 = liqNum((tds[4] || {}).textContent || '');
+      var v3 = liqNum((tds[3] || {}).textContent || '');
+      total = v8 || v4 || v3;
+
+      if (!byDate[dk]) byDate[dk] = { total: 0, ordenes: 0 };
+      byDate[dk].total += total;
+      byDate[dk].ordenes++;
     }
-    if (!fecha) continue;
+  });
 
-    var dk = fecha.substring(0, 10); // YYYY-MM-DD
-    if (!byDate[dk]) byDate[dk] = { total: 0, ordenes: 0 };
-    byDate[dk].total += liqNum(r[8] || r[3]);
-    byDate[dk].ordenes++;
-  }
+  // Anticipos / "pagos del día": se leen de DOS fuentes y se deduplican, para que
+  // funcione tanto si el usuario ya pulsó "Acumular" como si no. OJO: las dos hojas
+  // tienen estructuras DISTINTAS, así que se detecta por número de columnas:
+  //   • Hoja 16 (Anticipos): 18 columnas → Fecha de pago = col[8], Monto aprobado = col[6]
+  //   • Hoja 24 (Acumulado Bancolombia): estructura nativa de 10 columnas
+  //       → Fecha = col[1], Valor = col[5]  (Referencia = col[4])
+  //     Si tras "Acumular" quedaron filas clonadas de 18 columnas, se leen como en hoja 16.
+  (function() {
+    var seenPagos = {};
+    [16, 24].forEach(function(srcIdx) {
+      var panel = document.getElementById('sheet_' + srcIdx);
+      if (!panel) return;
+      var tbl = panel.querySelector('table');
+      if (!tbl) return;
+      var trs = Array.from(tbl.querySelectorAll('tbody tr'));
+      var curDk = '';
+      for (var ri = 0; ri < trs.length; ri++) {
+        var cells = Array.from(trs[ri].querySelectorAll('td'));
+        if (!cells.length) continue;
+        // Fila separadora del acumulado (📅 YYYY-MM-DD ...)
+        if (cells[0].colSpan >= 5 || cells.length <= 2) {
+          var sm = cells[0].textContent.trim().match(/(\d{4}-\d{2}-\d{2})/);
+          if (sm) curDk = sm[1];
+          continue;
+        }
+        var dk = '', valor = 0, ref = '';
+        if (cells.length >= 12) {
+          // Estructura Anticipos (18 cols): Fecha de pago=col[8] (o solicitud=col[2]),
+          // Monto aprobado=col[6] (o solicitado=col[5]), Referencia=col[9]
+          dk = vbNormDate((cells[8] || {}).textContent || '') ||
+               vbNormDate((cells[2] || {}).textContent || '') || curDk;
+          valor = liqNum((cells[6] || {}).textContent || '') ||
+                  liqNum((cells[5] || {}).textContent || '');
+          ref = ((cells[9] || {}).textContent || '').trim();
+        } else {
+          // Estructura Acumulado Bancolombia (10 cols): Fecha=col[1], Valor=col[5],
+          // Referencia=col[4]
+          dk = vbNormDate((cells[1] || {}).textContent || '') || curDk;
+          valor = Math.abs(liqNum((cells[5] || {}).textContent || ''));
+          ref = ((cells[4] || {}).textContent || '').trim();
+        }
+        if (!dk || !valor || valor <= 0) continue;
+        // Dedup por fecha + referencia + valor (un anticipo puede estar en ambas hojas)
+        var dpk = dk + '|' + ref + '|' + valor;
+        if (seenPagos[dpk]) continue;
+        seenPagos[dpk] = true;
+        byDatePagos[dk] = (byDatePagos[dk] || 0) + valor;
+      }
+    });
+  })();
 
-  // Fill auto cells in each data row
+  // Rellenar columnas auto en Cierre Diario (sheet 15)
   var rows = Array.from(wrap.querySelectorAll('tbody tr'));
+  var s15Changed = false;
   for (var i = 0; i < rows.length; i++) {
     var tds = rows[i].querySelectorAll('td');
     if (tds.length < 4) continue;
@@ -4632,45 +4737,141 @@ function cierreAutoCalc() {
     var m = fechaTxt.match(/(\d{4}-\d{2}-\d{2})/);
     if (!m) continue;
     var dk = m[1];
-    if (!byDate[dk]) continue;
 
-    var fmtTotal  = '$' + Math.round(byDate[dk].total).toLocaleString('es-CO');
-    var fmtOrd    = String(byDate[dk].ordenes);
-
-    if (tds[2].textContent.trim() !== fmtTotal) {
-      tds[2].textContent = fmtTotal;
+    // Si la fecha no está en byDate, intentar con día y mes intercambiados
+    // Ej: "2026-08-06" (guardado mal) → probar "2026-06-08" (correcto)
+    if (!byDate[dk]) {
+      var p = dk.split('-');
+      if (p.length === 3) {
+        var swapped = p[0] + '-' + p[2] + '-' + p[1];
+        if (byDate[swapped]) {
+          // Corregir la fecha en la celda
+          tds[1].textContent = swapped + ' 00:00:00';
+          dk = swapped;
+          s15Changed = true;
+        }
+      }
     }
-    if (tds[3].textContent.trim() !== fmtOrd) {
-      tds[3].textContent = fmtOrd;
+
+    if (byDate[dk]) {
+      var fmtTotal = '$' + Math.round(byDate[dk].total).toLocaleString('es-CO');
+      var fmtOrd   = String(byDate[dk].ordenes);
+      if (tds[0] && tds[0].textContent.trim() !== fmtTotal) { tds[0].textContent = fmtTotal; s15Changed = true; }
+      if (tds[2].textContent.trim() !== fmtTotal) { tds[2].textContent = fmtTotal; s15Changed = true; }
+      if (tds[3].textContent.trim() !== fmtOrd)   { tds[3].textContent = fmtOrd;   s15Changed = true; }
+    }
+
+    // Las siguientes columnas solo se autocompletan en filas ya "trabajadas",
+    // es decir, donde se registró quién cargó el día (col 1 = "Cargado por", tds[4]).
+    var cargadoPor = (tds[4] && tds[4].textContent || '').trim();
+    if (cargadoPor) {
+      // ── Pagos del día $ (tds[9]) ── (no toca celdas marcadas como manuales)
+      if (tds[9] && tds[9].hasAttribute('contenteditable') && tds[9].dataset.manual !== '1') {
+        if (byDatePagos[dk]) {
+          // Hubo anticipos esa fecha → mostrar la suma
+          var fmtPagos = '$' + Math.round(byDatePagos[dk]).toLocaleString('es-CO');
+          if (tds[9].textContent.trim() !== fmtPagos) { tds[9].textContent = fmtPagos; s15Changed = true; }
+        } else if (!tds[9].textContent.trim()) {
+          // Sin anticipos y celda vacía → "0"
+          tds[9].textContent = '0'; s15Changed = true;
+        }
+      }
+      // ── Pagos registrados por (tds[8]) → "NO HUBO" si no hubo anticipos y está vacía ──
+      // No toca celdas con nombre escrito ni marcadas como manuales.
+      if (tds[8] && tds[8].hasAttribute('contenteditable') && tds[8].dataset.manual !== '1' &&
+          !byDatePagos[dk] && !tds[8].textContent.trim()) {
+        tds[8].textContent = 'NO HUBO'; s15Changed = true;
+      }
+      // ── Estado del día (tds[12]) derivado de "Aprobado por" (tds[10]) ──
+      // Sin nombre del aprobador → "Pendiente verificar"; con nombre → "APROBADO".
+      // Solo se autoajusta si la celda está vacía o ya tiene un estado automático,
+      // para no pisar un estado escrito a mano.
+      if (tds[12] && tds[12].hasAttribute('contenteditable')) {
+        var curEstado = tds[12].textContent.trim();
+        var esAuto = !curEstado || /pendiente|aprobad/i.test(curEstado);
+        if (esAuto) {
+          var aprobadoPor = (tds[10] && tds[10].textContent || '').trim();
+          var estadoDeseado = aprobadoPor ? '✓ APROBADO' : '⏳ Pendiente verificar';
+          if (curEstado !== estadoDeseado) { tds[12].textContent = estadoDeseado; s15Changed = true; }
+        }
+      }
+    }
+
+    // Sincronizar tds[0] desde tds[2] si tds[0] quedó vacío pero tds[2] tiene valor
+    var val2 = tds[2].textContent.trim();
+    if (tds[0] && !tds[0].textContent.trim() && val2) {
+      tds[0].textContent = val2;
+      s15Changed = true;
     }
   }
+
+  // Guardar si hubo cambios para que restoreS15 no los pierda al recargar
+  if (s15Changed && typeof saveS15 === 'function') {
+    setTimeout(saveS15, 200);
+  }
 }
+
+// ── Disparador: al editar "Cargado por" (col 1, tds[4]) o "Aprobado por" (tds[10])
+// en una fila del Cierre Diario, recalcular esa fila. cierreAutoCalc(true) se encarga
+// de llenar Total ventas, # órdenes, Pagos del día ("0"/suma), Pagos registrados por
+// ("NO HUBO" si no hubo) y el Estado del día (derivado de "Aprobado por"). ──
+window._s15FillRowOnCargado = function(td) {
+  var tr = td && td.closest && td.closest('tr');
+  if (!tr) return;
+  var tds = Array.from(tr.querySelectorAll('td'));
+  if (tds.length < 13) return;                 // no es una fila de datos completa
+  // Dispara con "Cargado por" (tds[4]), "Pagos registrados por" (tds[8]) o "Aprobado por" (tds[10])
+  if (td !== tds[4] && td !== tds[8] && td !== tds[10]) return;
+  var fechaTxt = (tds[1].textContent || '').trim();
+  if (!/\d{4}-\d{2}-\d{2}/.test(fechaTxt)) return; // fila sin fecha válida
+  // force=true: el foco puede seguir dentro de la hoja 15 tras el blur
+  if (typeof cierreAutoCalc === 'function') cierreAutoCalc(true);
+  if (typeof saveS15 === 'function') setTimeout(saveS15, 250);
+};
 
 // ── Rellenar fechas faltantes en Cierre Diario desde acumulados ──
 function rellenarCierreDesdeAcumulados() {
   var wrap = document.getElementById('tablewrap_15');
   if (!wrap) return;
 
-  // Build byDate from VD (sheets 7+22), same logic as cierreAutoCalc
-  var rawRows = [].concat(liqReadRows(7), liqReadRows(22));
+  // Construir byDate usando separadores del acumulado como contexto de fecha
   var seen = {};
   var byDate = {};
-  for (var ri = 0; ri < rawRows.length; ri++) {
-    var r = rawRows[ri];
-    var id = (r[0] || '').trim();
-    if (!id || id === 'Id Orden' || !/^\d{4,}$/.test(id)) continue;
-    if (seen[id]) continue;
-    seen[id] = true;
-    var fecha = '';
-    for (var c = 1; c < Math.min(r.length, 15); c++) {
-      if (/\d{4}-\d{2}-\d{2}/.test(r[c] || '')) { fecha = r[c]; break; }
+  [7, 22].forEach(function(sheetIdx) {
+    var panel = document.getElementById('sheet_' + sheetIdx);
+    if (!panel) return;
+    var tbl = panel.querySelector('table');
+    if (!tbl) return;
+    var trs = Array.from(tbl.querySelectorAll('tbody tr'));
+    var currentDk = '';
+    for (var ri = 0; ri < trs.length; ri++) {
+      var tds = trs[ri].querySelectorAll('td');
+      if (!tds.length) continue;
+      var firstTd = tds[0];
+      if (firstTd.colSpan >= 5 || tds.length <= 2) {
+        var sm = firstTd.textContent.trim().match(/(\d{4}-\d{2}-\d{2})/);
+        if (sm) currentDk = sm[1];
+        continue;
+      }
+      var id = firstTd.textContent.trim();
+      if (!id || id === 'Id Orden' || !/^\d{4,}$/.test(id)) continue;
+      if (seen[id]) continue;
+      seen[id] = true;
+      var dk = '';
+      for (var c = 1; c < Math.min(tds.length, 20); c++) {
+        dk = vbNormDate(tds[c].textContent.trim());
+        if (dk) break;
+      }
+      if (!dk) dk = currentDk;
+      if (!dk) continue;
+      var v8 = liqNum((tds[8] || {}).textContent || '');
+      var v4 = liqNum((tds[4] || {}).textContent || '');
+      var v3 = liqNum((tds[3] || {}).textContent || '');
+      if (!byDate[dk]) byDate[dk] = { total: 0, ordenes: 0 };
+      byDate[dk].total += v8 || v4 || v3;
+      byDate[dk].ordenes++;
     }
-    if (!fecha) continue;
-    var dk = fecha.substring(0, 10);
-    if (!byDate[dk]) byDate[dk] = { total: 0, ordenes: 0 };
-    byDate[dk].total += liqNum(r[8] || r[3]);
-    byDate[dk].ordenes++;
-  }
+  });
 
   // Find dates already present in sheet 15
   var allRows = Array.from(wrap.querySelectorAll('tbody tr'));
@@ -4707,6 +4908,7 @@ function rellenarCierreDesdeAcumulados() {
     var tds = Array.from(tr.querySelectorAll('td'));
     if (tds.length < 4) return;
     tds[1].textContent = dk + ' 00:00:00';
+    if (tds[0]) tds[0].textContent = '$' + Math.round(byDate[dk].total).toLocaleString('es-CO');
     tds[2].textContent = '$' + Math.round(byDate[dk].total).toLocaleString('es-CO');
     tds[3].textContent = String(byDate[dk].ordenes);
     filled++;
@@ -4754,12 +4956,12 @@ function calcResumenDiario() {
     if (!id || !/^\d{4,}$/.test(id)) continue;
     if (seenVD[id]) continue;
     seenVD[id] = true;
-    var fecha = '';
+    var dk = '';
     for (var c = 1; c < Math.min(r.length, 15); c++) {
-      if (/\d{4}-\d{2}-\d{2}/.test(r[c]||'')) { fecha = r[c]; break; }
+      dk = vbNormDate(r[c] || '');
+      if (dk) break;
     }
-    if (!fecha) continue;
-    var dk = fecha.substring(0, 10);
+    if (!dk) continue;
     if (!byDate[dk]) byDate[dk] = { ordenes:0, boletas:0, total:0, efectivo:0, promotor:0, bancolombia:0 };
     var dv = byDate[dk];
     dv.ordenes++;
@@ -7074,14 +7276,18 @@ function b17CompareAnticipos() {
     bankDebits.push({ fecha, monto: Math.round(r.debito), desc: r.desc, ref: r.ref, idx: i });
   });
 
-  // 2. Leer Anticipos (sheet 16) — columnas: [0]=vacío,[1]=#,[2]=Fecha sol,[3]=Cód evt,
+  // 2. Leer Anticipos — columnas: [0]=vacío,[1]=#,[2]=Fecha sol,[3]=Cód evt,
   //    [4]=Empresario,[5]=Monto sol,[6]=Monto aprobado,[7]=Método pago,[8]=Fecha pago,[9]=# Comprobante
-  const rows16 = liqReadRows(16);
+  //    Se leen DOS fuentes con dedup, igual que en "pagos del día": hoja 16 (Anticipos
+  //    del día, sin acumular) + hoja 24 (Acumulado Bancolombia, ya acumulado). Así el
+  //    cruce funciona aunque el usuario ya haya pulsado "Acumular" (que vacía la hoja 16).
+  const rows16 = [].concat(liqReadRows(16), liqReadRows(24));
   const anticipos = [];
+  const _seenAnt = new Set();
   for (const r of rows16) {
     if (r.length < 9) continue;
     const num = (r[1] || '').trim();
-    if (!num || !/^\d+$/.test(num)) continue; // saltar filas de cabecera/título
+    if (!num || !/^\d+$/.test(num)) continue; // saltar filas de cabecera/título/separadores
     const _rawM = (r[6] || '').replace(/[$\s]/g, '').trim();
     const _parsedM = Math.abs(liqNum(r[6] || '0'));
     // "Miles de pesos": "525,60" → 525.6 miles → 525.600 COP  /  "717,00" → 717.000 COP
@@ -7091,6 +7297,10 @@ function b17CompareAnticipos() {
       : Math.round(_parsedM);
     const fecha = _normFechaB17(r[8] || '');
     if (monto === 0 && !fecha) continue;
+    // Dedup: un mismo anticipo puede aparecer en hoja 16 y 24 a la vez (transitorio)
+    const antKey = num + '|' + fecha + '|' + monto + '|' + (r[9] || '').trim();
+    if (_seenAnt.has(antKey)) continue;
+    _seenAnt.add(antKey);
     anticipos.push({ num, fecha, monto, evento: r[3]||'', empresario: r[4]||'', metodo: r[7]||'', estado: r[12]||'', ref: r[9]||'' });
   }
 
@@ -8287,6 +8497,97 @@ showSheet = function(idx) {
   window.saveS15    = saveS15;
   window.restoreS15 = restoreS15;
 
+  // ── Recuperación de emergencia: datos conocidos del Cierre Diario (mayo 13 – junio 10) ──
+  // Usa índices exactos de fila (verificados contra la estructura real del HTML).
+  // La tabla tiene todas las fechas del calendario: Mayo 1=allRows[13], Mayo 12=allRows[24],
+  // Mayo 13=allRows[25], Mayo 14=allRows[26]... Jun 10=allRows[53].
+  window._recoverS15 = function() {
+    var wrap = document.getElementById('tablewrap_15');
+    if (!wrap) return;
+    // [idx_en_allRows, fecha, total, ords, cargado, hora, verificado, ok, pagos_por, pagos$, aprobado, fecha_apro, estado, obs]
+    var RECOVERY = [
+      [25,'2026-05-13 00:00:00','','','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','✓ APROBADO',''],
+      [26,'2026-05-14 00:00:00','','','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','✓ APROBADO',''],
+      [27,'2026-05-15 00:00:00','','','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','✓ APROBADO',''],
+      [28,'2026-05-16 00:00:00','','','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','✓ APROBADO',''],
+      [29,'2026-05-17 00:00:00','','','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','✓ APROBADO',''],
+      [30,'2026-05-18 00:00:00','','','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','✓ APROBADO',''],
+      [31,'2026-05-19 00:00:00','','','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','✓ APROBADO',''],
+      [32,'2026-05-20 00:00:00','','','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','✓ APROBADO',''],
+      [33,'2026-05-21 00:00:00','','','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','✓ APROBADO',''],
+      [34,'2026-05-22 00:00:00','','','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','✓ APROBADO',''],
+      [35,'2026-05-23 00:00:00','','','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','✓ APROBADO',''],
+      [36,'2026-05-24 00:00:00','$17.117.600','92','lina orejuela','','millerlandy andrade','SI','NO HUBO','0','OMAR','','✓ APROBADO',''],
+      [37,'2026-05-25 00:00:00','$35.217.000','152','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','✓ APROBADO',''],
+      [38,'2026-05-26 00:00:00','$36.952.400','170','lina orejuela','','millerlandy andrade','si','Valentina y Luis','$5.644.852','OMAR','','✓ APROBADO',''],
+      [39,'2026-05-27 00:00:00','$30.493.200','138','lina orejuela','','millerlandy andrade','si','Valentina y Luis','$37.200.000','OMAR','','✓ APROBADO',''],
+      [40,'2026-05-28 00:00:00','$25.519.300','120','lina orejuela','','millerlandy andrade','SI','Valentina y Luis','$5.600.030','OMAR','','✓ APROBADO',''],
+      [43,'2026-05-31 00:00:00','$14.390.400','60','lina orejuela','','millerlandy andrade','si','Valentina y Luis','$1.200.000','OMAR','','✓ APROBADO',''],
+      [44,'2026-06-01 00:00:00','$20.207.500','90','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','✓ APROBADO',''],
+      [45,'2026-06-02 00:00:00','$22.128.800','122','lina orejuela','','millerlandy andrade','si','Valentina y Luis','$9.089.046','OMAR','','',''],
+      [46,'2026-06-03 00:00:00','$21.069.800','96','lina orejuela','','millerlandy andrade','si','Valentina y Luis','$19.454.545','OMAR','','',''],
+      [47,'2026-06-04 00:00:00','$27.168.300','113','lina orejuela','','millerlandy andrade','si','Valentina y Luis','$7.459.348','OMAR','','',''],
+      [48,'2026-06-05 00:00:00','$18.653.400','85','lina orejuela','','millerlandy andrade','si','Valentina y Luis','$6.474.220','OMAR','','',''],
+      [49,'2026-06-06 00:00:00','$15.697.200','67','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','',''],
+      [51,'2026-06-08 00:00:00','','','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','',''],
+      [52,'2026-06-09 00:00:00','','','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','',''],
+      [53,'2026-06-10 00:00:00','','','lina orejuela','','millerlandy andrade','si','NO HUBO','0','OMAR','','',''],
+    ];
+    var allTableRows = Array.from(wrap.querySelectorAll('tbody tr'));
+    // Limpiar fechas corruptas en filas de encabezado (idx 0,3,10 — spacers que no son datos)
+    [0, 3, 10].forEach(function(hi) {
+      var htr = allTableRows[hi];
+      if (!htr) return;
+      var htds = Array.from(htr.querySelectorAll('td'));
+      htds.forEach(function(td) {
+        if (td.hasAttribute('contenteditable') && /^\d{4}-\d{2}-\d{2}/.test((td.textContent||'').trim())) {
+          td.textContent = td.dataset.orig || '';
+        }
+      });
+    });
+    // Leer bnl_s15_v1 existente y conservar SOLO filas de mayo 1-12 con idx correcto (13-24)
+    // Las entradas con idx < 13 o idx > 24 que tengan fechas de mayo 1-12 son datos corruptos
+    // (escritos a filas de encabezado por versión anterior con bug) — se descartan.
+    var savedRows = [];
+    try {
+      var raw = localStorage.getItem('bnl_s15_v1');
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        var arr = Array.isArray(parsed) ? parsed : (parsed.rows || []);
+        arr.forEach(function(r) {
+          if (r.key && r.key < '2026-05-13' && typeof r.idx === 'number' && r.idx >= 13 && r.idx <= 24) {
+            savedRows.push(r);
+          }
+        });
+      }
+    } catch(e) {}
+    // Escribir cada fila directamente al DOM usando índice exacto + guardar en savedRows
+    RECOVERY.forEach(function(row) {
+      var rowIdx = row[0];
+      var fecha  = row[1];
+      // cells[0]=legacy, [1]=fecha, [2]=total, [3]=ords, [4]=cargado, [5]=hora,
+      // [6]=verificado, [7]=ok, [8]=pagos_por, [9]=pagos$, [10]=aprobado, [11]=fecha_apro, [12]=estado, [13]=obs
+      var cells = ['', row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10], row[11], row[12], row[13]];
+      // Escribir al DOM
+      var tr = allTableRows[rowIdx];
+      if (tr) {
+        var tds = Array.from(tr.querySelectorAll('td'));
+        cells.forEach(function(val, ci) {
+          var td = tds[ci];
+          if (td && td.hasAttribute('contenteditable')) td.textContent = val;
+        });
+      }
+      savedRows.push({ key: fecha, idx: rowIdx, cells: cells });
+    });
+    // Guardar en localStorage y Firebase con timestamp alto para que tome prioridad
+    var json = JSON.stringify({ rows: savedRows, _ts: Date.now() });
+    try { localStorage.setItem('bnl_s15_v1', json); } catch(e) {}
+    if (typeof window._fbForceWrite === 'function') window._fbForceWrite('bnl_s15_v1', json);
+    // Recalcular totales automáticos desde el acumulado
+    if (typeof cierreAutoCalc === 'function') setTimeout(cierreAutoCalc, 300);
+    console.log('[Recovery] Cierre Diario restaurado: ' + RECOVERY.length + ' filas escritas a índices exactos.');
+  };
+
   let _t15 = null;
 
   // Guardar al salir de cualquier celda editable
@@ -8301,6 +8602,11 @@ showSheet = function(idx) {
     // Sheet 15: guardar con debounce dedicado
     if (e.target.closest('#tablewrap_15')) {
       _s15Dirty = true;
+      // Si se registró "Cargado por" (col 1), rellenar las celdas auto de esa fila
+      var _td15 = e.target.closest('td[contenteditable]');
+      if (_td15 && typeof window._s15FillRowOnCargado === 'function') {
+        window._s15FillRowOnCargado(_td15);
+      }
       clearTimeout(_t15);
       _t15 = setTimeout(saveS15, 800);
       return;
@@ -8353,6 +8659,16 @@ showSheet = function(idx) {
   document.addEventListener('input', function(e) {
     if (!e.target.closest('#tablewrap_15')) return;
     _s15Dirty = true;
+    // Si el usuario escribe en "Pagos registrados por" (col tds[8]) o "Pagos del día"
+    // (tds[9]), marcar la celda como manual para que el auto-relleno nunca la pise.
+    var _ctd = e.target.closest('td[contenteditable]');
+    if (_ctd) {
+      var _ctds = Array.from(_ctd.closest('tr').querySelectorAll('td'));
+      if (_ctd === _ctds[8] || _ctd === _ctds[9]) {
+        if (_ctd.textContent.trim()) _ctd.dataset.manual = '1';
+        else delete _ctd.dataset.manual;
+      }
+    }
     clearTimeout(_t15Input);
     _t15Input = setTimeout(saveS15, 600);
   }, true);
@@ -8371,8 +8687,12 @@ showSheet = function(idx) {
     if (document.hidden) { saveStaticSheets(); saveS15(); _s16SaveNow(); }
   });
 
-  // Guardar antes de cerrar o recargar — incluye sheet 15 y 16
-  window.addEventListener('beforeunload', function() { saveStaticSheets(); saveS15(); _s16SaveNow(); });
+  // Guardar antes de cerrar o recargar — NO guarda hoja 15 si fue reseteada recientemente
+  window.addEventListener('beforeunload', function() {
+    saveStaticSheets();
+    if (!window._s15JustReset) saveS15();
+    _s16SaveNow();
+  });
 
   // Al cargar un archivo en hoja editable, guardar después del render
   const _origLoadFile = typeof loadFile !== 'undefined' ? loadFile : null;
@@ -8914,10 +9234,11 @@ showSheet = function(idx) {
         if (d.mp?.length)          restoreToSheet(SHEET_MAP.dst.mp,         d.mp);
         if (d.bancolombia?.length) restoreToSheet(SHEET_MAP.dst.anticipos,  d.bancolombia);
         if (d.extracto?.length)    restoreToSheet(SHEET_MAP.dst.extracto,   d.extracto);
-        if (typeof cur !== 'undefined' && cur === 15 && typeof cierreAutoCalc === 'function') {
+        // Recalcular Cierre Diario siempre que llegue acumulado nuevo (no solo cuando cur===15)
+        if (typeof cierreAutoCalc === 'function') {
           var _wrap15 = document.getElementById('tablewrap_15');
-          var _ae = document.activeElement;
-          if (!_wrap15 || !_ae || !_wrap15.contains(_ae)) setTimeout(cierreAutoCalc, 200);
+          var _ae15 = document.activeElement;
+          if (!_wrap15 || !_ae15 || !_wrap15.contains(_ae15)) setTimeout(cierreAutoCalc, 300);
         }
         if (typeof cur !== 'undefined' && cur === 11 && typeof calcResumenDiario === 'function') {
           setTimeout(calcResumenDiario, 300);
@@ -9186,6 +9507,24 @@ showSheet = function(idx) {
     }, 250);
     // 4d. Restaurar sheet 15 (Cierre Diario) desde bnl_s15_v1
     setTimeout(() => { if (typeof window.restoreS15 === 'function') window.restoreS15(); }, 600);
+    // 4e. Auto-recovery sheet 15: verifica que la FILA DE DATOS de mayo 13 (allRows[25])
+    // tenga la fecha correcta. Si no, corre la recovery (cubre el caso donde datos quedaron
+    // guardados en filas de encabezado por versión anterior con bug).
+    setTimeout(function() {
+      if (typeof window._recoverS15 !== 'function') return;
+      try {
+        var wrap15 = document.getElementById('tablewrap_15');
+        if (!wrap15) return;
+        var allTrs = Array.from(wrap15.querySelectorAll('tbody tr'));
+        var may13Row = allTrs[25]; // fila de datos para mayo 13 (índice verificado)
+        var may13Td1 = may13Row && may13Row.querySelectorAll('td')[1];
+        var may13HasDate = may13Td1 && (may13Td1.textContent || '').trim().startsWith('2026-05-13');
+        if (!may13HasDate) {
+          console.log('[BNL] Auto-recovery s15: fila mayo 13 vacía — restaurando mayo 13 – junio 10');
+          window._recoverS15();
+        }
+      } catch(e) { console.warn('[BNL] Auto-recovery check failed', e); }
+    }, 1000);
     // 5. Restaurar ficha técnica
     setTimeout(() => {
       try {
